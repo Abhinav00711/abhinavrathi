@@ -1,0 +1,62 @@
+---
+import Section from "./Section.astro";
+
+/**
+ * Stack — three buckets per the plan §4 ("Confident / Strong / Working knowledge").
+ * Be honest. Better to have a short list answered confidently in interview
+ * than a long list with question marks.
+ */
+const buckets: Array<{
+  label: string;
+  hint: string;
+  items: string[];
+}> = [
+  {
+    label: "Confident · ship to production",
+    hint: "I'd answer interview questions on these without hedging.",
+    items: ["Python", "Flask", "MySQL", "REST APIs", "Git", "Linux"],
+  },
+  {
+    label: "Strong · use regularly",
+    hint: "Comfortable, opinionated, but I'd defer to a specialist on edge cases.",
+    items: ["Redis", "Docker", "Pandas", "Celery", "AWS (EC2, S3, RDS)", "SQLAlchemy"],
+  },
+  {
+    label: "Working knowledge",
+    hint: "Read code in these. Ramp-up is days, not weeks.",
+    items: ["Go", "Kafka", "React", "TypeScript", "Kubernetes"],
+  },
+];
+---
+
+<Section
+  id="stack"
+  eyebrow="Stack"
+  title="What I ship in, what I'm comfortable in, and what I'm ramping on."
+>
+  <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+    {
+      buckets.map((b) => (
+        <div
+          class="reveal rounded-md border p-6"
+          style="border-color: var(--color-hairline); background: var(--color-panel);"
+        >
+          <h3
+            class="text-white"
+            style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em;"
+          >
+            {b.label}
+          </h3>
+          <p class="mt-2 text-[13px]" style="color: var(--color-muted);">
+            {b.hint}
+          </p>
+          <ul class="mt-5 flex flex-wrap gap-1.5">
+            {b.items.map((it) => (
+              <li class="chip">{it}</li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+  </div>
+</Section>

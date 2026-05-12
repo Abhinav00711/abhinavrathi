@@ -1,0 +1,70 @@
+---
+title: "gmail-rule-processor"
+summary: "Tiny, opinionated Python: rules as data, application as idempotent operations against the Gmail API."
+role: "Solo · weekend project"
+year: 2025
+tech: ["Python", "Gmail API", "SQLite", "PyYAML"]
+cover: ../../assets/work/gmail-rule-processor/cover.png
+anonymized: false
+repo: "https://github.com/Abhinav00711/gmail-rule-processor"
+metrics:
+  - { label: "inbox state", value: "zero, kept ~12 months" }
+  - { label: "rule application", value: "idempotent" }
+  - { label: "rules in production", value: "5–10" }
+  - { label: "code", value: "small, on purpose" }
+order: 6
+---
+
+> **Outcome.** A small, opinionated Python utility that turns inbox rules
+> into idempotent operations against the Gmail API. Automation
+> infrastructure, not a script.
+
+## Context
+
+I wanted to stop touching individual emails. Existing tools were either
+too magic (cloud filters that move things in surprising ways) or too
+low-level (raw API calls in cron). I wrote what was missing in between.
+
+## My role
+
+Solo, weekend project. The discipline was in saying *no* to features.
+
+## Approach
+
+Two decisions did most of the work.
+
+**Rules are data, not code.** Every rule lives in a YAML file —
+deterministic, version-controlled, diffable. Adding or changing a rule is
+a one-line edit, not a Python deploy. This costs some expressiveness
+up-front; it pays back on every change after that.
+
+**Rule application is idempotent.** Each `(rule, message)` pair is hashed
+and recorded in a SQLite log; the executor refuses to re-do work it's
+already done. This means the script can be re-run on any cadence
+(cron, manual, after a network blip) without double-labeling, double-archiving,
+or double-replying. The day I added that was the day the tool stopped
+needing supervision.
+
+The interesting part wasn't the YAML grammar — that was easy and I almost
+overbuilt it. The interesting part was the idempotency log: SQLite is
+exactly the right level of tool for this job. A Postgres choice would
+have been over-engineering.
+
+## Architecture
+
+YAML rules → parser → matcher → idempotency check (SQLite) → Gmail API
+call. Five steps, in that order, each with one clear responsibility.
+
+## Results
+
+- Inbox state: **zero, kept** for ~12 months.
+- Rules in production: **5–10**.
+- Time per inbox audit: minutes → ~zero.
+- Lines of code: small, on purpose.
+
+## What I'd do differently
+
+Very little. This is one of the few weekend projects I haven't wanted to
+rewrite a year later. If anything: I'd commit harder to "small things
+stay small" — I almost shipped a rule-engine DSL that nobody asked for,
+and it would have killed the thing that makes this tool work.

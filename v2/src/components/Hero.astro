@@ -1,0 +1,175 @@
+---
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Eyebrow facts — currently-true. Update if role/location changes.
+const eyebrow = "Currently — ML & Backend @ Axxela · Kolkata, IN";
+
+// Positioning sentence (Phase A.1 — ML-foreground pivot, 2026-05-12).
+// Split into two visual lines for cadence.
+const headlineLineOne = "ML engineer shipping production Python";
+const headlineLineTwo =
+  "at a prop trading firm. Models, services, and the infrastructure that puts the two together.";
+
+// Metric strip (Phase A.1 — picked 2026-05-12). Years + tagline + case studies.
+// Kept as three logical cells; the grid wraps to 2-col on mobile.
+const metrics: Array<{ k: string; v: string }> = [
+  { k: "in production", v: "3 yrs" },
+  { k: "applied ML where", v: "bugs cost dollars" },
+  { k: "case studies", v: "6 dated · metric-backed" },
+  { k: "open to", v: "senior roles" },
+];
+---
+
+<section
+  class="relative overflow-hidden pt-32 pb-24 md:pt-40 md:pb-32"
+  data-hero
+>
+  <!-- subtle dot grid is applied to body; this layer adds a soft cobalt halo -->
+  <div
+    aria-hidden="true"
+    class="pointer-events-none absolute inset-0 z-0"
+    style="
+      background:
+        radial-gradient(60% 50% at 18% 20%, rgba(61,82,254,0.10), transparent 70%),
+        radial-gradient(45% 40% at 88% 80%, rgba(61,82,254,0.06), transparent 75%);
+    "
+  >
+  </div>
+
+  <!-- Cursor-follow spotlight (desktop, hover-capable, motion-OK only).
+       Reads --spot-x / --spot-y CSS variables set by the pointermove listener. -->
+  <div aria-hidden="true" class="cursor-spotlight"></div>
+
+  <div class="container-prose relative z-10">
+    <p class="eyebrow reveal">{eyebrow}</p>
+
+    <h1 class="headline reveal mt-6 max-w-[16ch]" style="--reveal-delay: 80ms;">
+      <span class="block">{headlineLineOne}</span>
+      <span class="mt-2 block text-muted-display">{headlineLineTwo}</span>
+    </h1>
+
+    <p class="reveal mt-8 max-w-prose text-[17px] text-muted" style="--reveal-delay: 160ms;">
+      I do applied ML at a place where the model's output becomes a real
+      order — which is a very effective way to learn what &quot;good enough&quot;
+      isn't. Equally comfortable in the eval harness, the serving layer, and
+      the Flask + MySQL plumbing that connects them.
+    </p>
+
+    <!-- metric strip -->
+    <ul
+      class="reveal mt-10 grid grid-cols-2 gap-px overflow-hidden rounded-md border md:grid-cols-4"
+      style="border-color: var(--color-hairline); background: var(--color-hairline); --reveal-delay: 240ms;"
+    >
+      {
+        metrics.map((m) => (
+          <li
+            class="flex flex-col gap-1 px-4 py-3"
+            style="background: var(--color-surface);"
+          >
+            <span class="mono text-[11px] uppercase tracking-wider text-faint">
+              {m.k}
+            </span>
+            <span class="mono text-[15px] text-white">{m.v}</span>
+          </li>
+        ))
+      }
+    </ul>
+
+    <!-- CTAs -->
+    <div class="reveal mt-10 flex flex-wrap items-center gap-3" style="--reveal-delay: 320ms;">
+      <a href="#work" class="btn btn-primary"
+        >View case studies
+        <span aria-hidden="true">→</span>
+      </a>
+      <a
+        href="mailto:rathiabhinav01@gmail.com?subject=Senior%20role%20inquiry&body=Hi%20Abhinav%2C%0A%0A"
+        class="btn btn-secondary"
+      >
+        Email me
+      </a>
+      <span class="ml-2 hidden items-center gap-2 text-xs text-faint sm:inline-flex">
+        or press <span class="kbd">K</span> for quick actions
+      </span>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Cursor-follow spotlight on hero. Listener attached to the section itself so
+  // it only fires while the cursor is over the hero — no global pointermove.
+  // rAF-throttled to one paint per frame; default position keeps the gradient
+  // soft when the cursor leaves.
+  (() => {
+    const hero = document.querySelector<HTMLElement>("[data-hero]");
+    if (!hero) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia("(hover: none)").matches) return;
+
+    let raf = 0;
+    let nextX = 50;
+    let nextY = -10;
+
+    const onMove = (e: PointerEvent) => {
+      const rect = hero.getBoundingClientRect();
+      nextX = ((e.clientX - rect.left) / rect.width) * 100;
+      nextY = ((e.clientY - rect.top) / rect.height) * 100;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        hero.style.setProperty("--spot-x", `${nextX}%`);
+        hero.style.setProperty("--spot-y", `${nextY}%`);
+        raf = 0;
+      });
+    };
+
+    const onLeave = () => {
+      hero.style.setProperty("--spot-x", "50%");
+      hero.style.setProperty("--spot-y", "-10%");
+    };
+
+    hero.addEventListener("pointermove", onMove, { passive: true });
+    hero.addEventListener("pointerleave", onLeave);
+  })();
+</script>
+
+<style>
+  .text-muted-display {
+    color: var(--color-muted);
+  }
+  .text-muted {
+    color: var(--color-muted);
+  }
+  .text-faint {
+    color: var(--color-faint);
+  }
+  .cursor-spotlight {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    /* Default — sits softly above the headline area; the listener overwrites. */
+    --spot-x: 50%;
+    --spot-y: -10%;
+    background: radial-gradient(
+      600px circle at var(--spot-x) var(--spot-y),
+      rgba(61, 82, 254, 0.08),
+      transparent 60%
+    );
+    opacity: 0;
+    transition: opacity 220ms ease;
+  }
+  /* Only fade in once a hover-capable, motion-allowed device is detected.
+     The script also bails on those, so this rule is a CSS-side belt-and-braces. */
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    [data-hero]:hover .cursor-spotlight {
+      opacity: 1;
+    }
+  }
+  /* Light theme — accent darker, gradient should ease off so it doesn't muddy. */
+  :root[data-theme="light"] .cursor-spotlight {
+    background: radial-gradient(
+      600px circle at var(--spot-x) var(--spot-y),
+      rgba(36, 54, 199, 0.08),
+      transparent 60%
+    );
+  }
+</style>

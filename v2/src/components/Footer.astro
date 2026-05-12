@@ -1,0 +1,77 @@
+---
+const year = new Date().getFullYear();
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<footer
+  class="border-t"
+  style="border-color: var(--color-hairline); padding-block: 32px;"
+>
+  <div
+    class="container-prose flex flex-col items-start justify-between gap-3 md:flex-row md:items-center"
+  >
+    <p
+      class="mono text-[12px]"
+      style="color: var(--color-faint);"
+    >
+      © {year} Abhinav Rathi
+    </p>
+
+    <nav
+      class="footer-nav mono text-[12px]"
+      style="color: var(--color-muted);"
+      aria-label="Footer"
+    >
+      <a href={`${base}/now/`}>now</a>
+      <span style="color: var(--color-faint);">·</span>
+      <a href={`${base}/writing/`}>writing</a>
+      <span style="color: var(--color-faint);">·</span>
+      <a href={`${base}/rss.xml`}>rss</a>
+    </nav>
+
+    <p
+      class="mono text-[12px]"
+      style="color: var(--color-faint);"
+    >
+      Built with{" "}
+      <a
+        href="https://astro.build"
+        target="_blank"
+        rel="noreferrer noopener"
+        class="hover:text-accent"
+        style="color: var(--color-muted);"
+        >Astro</a
+      >{" "}
+      ·{" "}
+      <a
+        href="https://tailwindcss.com"
+        target="_blank"
+        rel="noreferrer noopener"
+        class="hover:text-accent"
+        style="color: var(--color-muted);"
+        >Tailwind v4</a
+      >{" "}
+      · hosted on GitHub Pages ·{" "}
+      <a
+        href="https://github.com/Abhinav00711/abhinavrathi"
+        target="_blank"
+        rel="noreferrer noopener"
+        class="hover:text-accent"
+        style="color: var(--color-muted);"
+        >source</a
+      >
+    </p>
+  </div>
+</footer>
+
+<style>
+  footer a:hover,
+  footer a:focus-visible {
+    color: var(--color-accent-text);
+  }
+  .footer-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+</style>

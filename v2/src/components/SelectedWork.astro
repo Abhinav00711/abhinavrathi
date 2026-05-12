@@ -1,0 +1,35 @@
+---
+import { getCollection } from "astro:content";
+import Section from "./Section.astro";
+import WorkTile from "./WorkTile.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const projects = (await getCollection("projects", (p) => p.data.published))
+  .sort((a, b) => a.data.order - b.data.order);
+---
+
+<Section
+  id="work"
+  eyebrow="Selected work"
+  title="Six case studies, dated and metric-backed."
+  intro="Two public ML projects up front (the loop around the model — eval harness, serving, latency). Three anonymized engineering case studies from inside a prop trading firm (engineering patterns only — no products, strategies, or P&L). One automation-infra showcase. Each opens to a dedicated page with the full story."
+  aside={{ label: "All work", href: "#work" }}
+>
+  <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    {
+      projects.map((p) => (
+        <WorkTile
+          href={`${base}/work/${p.id}/`}
+          slug={p.id}
+          eyebrow={`${p.data.year}${p.data.anonymized ? " · anonymized" : ""}`}
+          title={p.data.title}
+          summary={p.data.summary}
+          tech={p.data.tech}
+          metric={p.data.metrics?.[0]?.value}
+          cover={p.data.cover}
+        />
+      ))
+    }
+  </div>
+</Section>

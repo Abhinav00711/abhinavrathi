@@ -1,0 +1,192 @@
+---
+title: "Recovery is the path: designing around broker outages"
+summary: "The happy path is the special case. A field guide to high-water-mark recovery for systems that ingest from upstream feeds you don't control."
+published: 2026-08-15
+draft: true
+tags: ["recovery", "broker-feeds", "backend", "prop-trading"]
+---
+
+I want to argue an inversion: in a system that ingests data from
+upstream feeds you don't control, the recovery path isn't the special
+case. The recovery path *is* the system. The happy path is "the
+recovery path, but we didn't have to use it this time". Designing the
+recovery first — and treating the happy path as a degenerate case of
+it — makes both paths simpler, and it's the only design I've shipped
+that didn't bite me later.
+
+The example throughout is broker ingestion at a trading firm, because
+that's where I learned it. The pattern generalizes to anything that
+reads from an upstream source you can't fix.
+
+## The shape of an outage
+
+Three failure modes I keep seeing in production, and which the design
+has to handle together. Most real outages are a *combination* of these,
+not a clean instance of one.
+
+**Hard outage.** The upstream endpoint is unreachable for a window.
+Easy to detect — connections fail, timeouts fire, alerts go off. Hard
+to recover *correctly* without either losing rows ("we'll catch up
+on reconnect" and then nobody actually catches up) or duplicating them
+("just replay the whole window" without dedup).
+
+**Soft outage.** The endpoint is up but serves stale data, or returns
+200 with silently empty payloads, or has fallen N seconds behind. Hard
+to detect because nothing fires; often harder to clean up than a hard
+outage because the system *thinks* it's working and you only notice
+when somebody downstream notices.
+
+**Reordering.** The endpoint is up but messages arrive out of order
+or out of band — a fill from 11am lands after a fill from 11:05am, or
+a batch retransmit interleaves with new traffic. The trickiest of the
+three because the system thinks it's working *and* the data is
+arriving. The bug shows up much later, in the form of a position that
+doesn't match the source of truth.
+
+The design has to handle all three. Most failures I've cleaned up at
+Axxela were combinations: a hard outage followed by a soft outage on
+reconnect, or a soft outage that masked a reordering event in the
+catch-up replay.
+
+## The recovery-first design
+
+Three commitments that have to land before any per-broker code does.
+
+### 1. A high-water mark per (source, kind)
+
+Not a global cursor. **Per source, per kind.** Each upstream gets its
+own mark; each kind of message (fill confirmation, position snapshot,
+cancellation) gets its own mark within the source. The mark is the
+latest confirmed-applied id from that source. Persisted in MySQL, in
+the same transaction as the state it advances along.
+
+The discipline here is to advance the mark *only after* the downstream
+effect is durable. Not before. If you advance the mark and then crash
+before applying the row, you've lost the row forever — the next run
+starts from after where the row was. Advancing the mark is the
+*commit* of a recovery primitive; treat it like one.
+
+Why per-source: brokers fail independently. Why per-kind: kinds
+evolve at different rates and have different replay semantics. The
+per-(source, kind) granularity costs one extra row in a small table
+and pays itself back the first time you have to replay only one of
+them.
+
+### 2. A replay endpoint that is *always* safe to call
+
+The recovery story can't be "manually run this script with these
+flags and hope you remember the order". It has to be a one-button
+replay from `(source, kind, since)` that is provably idempotent —
+the contract from [the previous post](/writing/idempotency-contract-before-perf)
+shows up here. If you can't replay arbitrarily, you don't have a
+recovery story; you have a debugger.
+
+The replay endpoint becomes a primitive everything else is built on.
+You replay it after a hard outage. You replay it during the
+post-mortem of a soft outage. You replay it weekly as a drill to
+keep the muscle warm. The same code path serves all three. That's
+worth the discipline of building it before you build the happy path.
+
+### 3. A liveness signal that distinguishes "up but quiet" from "down"
+
+The most expensive class of outage is the soft one — endpoint up, no
+data, no alarms. A liveness signal protects against this. The
+simplest version: a heartbeat the source emits regularly, regardless
+of business activity. If you can't get one from the upstream, fabricate
+one yourself with a scheduled probe (read the latest non-empty
+response, log it, alert if it stops changing).
+
+"No rows for 6h" should page someone, not silently look like a quiet
+trading day. The cost of building this is one cron and a small
+detector. The cost of *not* building it is the soft-outage incident
+you'll have eventually, and the embarrassed post-mortem where the
+detection step is "the trader noticed".
+
+## The outage scenario
+
+A few months after we shipped the broker-ingestion pipeline, one of
+our upstream broker connections had what turned out to be a soft
+outage during an active trading window. The connection stayed up.
+The hard-outage detector didn't fire. The heartbeat detector wasn't
+deployed yet — the post-mortem listed that as the top action item.
+Detection was, in the end, somebody on the trading desk noticing the
+numbers didn't move on a name they were watching.
+
+The interesting part of the story is what happened *after* detection,
+because that's where the recovery-first design earned its keep. We
+called the replay endpoint with `(source=broker-X, kind=fills,
+since=<known-good-mark>)`. The endpoint walked forward from the
+high-water mark, hit the rows the broker had quietly missed, applied
+them through the same idempotency-checked write path the live pipeline
+uses, and advanced the mark. No double-writes — the dedup keys made
+the replay safe by construction. No manual cleanup. The cleanup *was*
+the replay.
+
+The actionable item from the post-mortem was the heartbeat detector,
+not anything about the recovery path. The recovery path didn't need
+to change. That's the whole pitch for designing it first: when the
+incident happens, the recovery is a one-button operation, and the
+post-mortem can be about *detection* rather than *cleanup*.
+
+## What "recovery is the path" buys you
+
+A short list, in rough order of how much I've come to value them:
+
+**Drills become free.** "Replay yesterday's broker X feed" is the
+*same operation* as "recover from broker X's outage". You run it
+once a week to keep the runbook honest and to confirm that the
+replay still works under the current state of the world. If the
+drill stops working, you find out on a Tuesday afternoon, not at
+2am on the day of the actual outage.
+
+**Onboarding new brokers is the same shape.** Define the high-water
+mark, write the adapter, plug into the existing replay endpoint. The
+recovery code is shared across all brokers; only the adapter is
+new. New brokers ship in days because nothing about recovery has to
+be reinvented for each one.
+
+**You can refactor the happy path without fear.** If the replay
+path is provably correct, the request-time path is allowed to be
+wrong — briefly, recoverably. You can deploy mid-trading-day,
+because the worst case is "kick the replay after the window
+closes". I can't overstate how much that loosens the schedule on
+which the team can work.
+
+## What it doesn't buy you
+
+Equally short. The pattern is not free:
+
+It doesn't catch *upstream* corruption. If the broker sends bad
+data, you'll replay bad data faithfully. The validation layer is
+separate — input validation is a different problem and lives
+between the adapter and the high-water mark. Don't conflate them.
+
+It costs storage. The high-water marks plus the dedup keys add up
+over time. Document the retention window for each (per-source, since
+brokers age out at different rates), put an enforcement job in, and
+budget for it. The cost is small but real.
+
+It pushes complexity into the schema. New engineers need a tour —
+"why are these tables shaped this way" is not obvious until you've
+seen the recovery path execute once. Write the tour. Keep it short.
+
+## Closing
+
+The inversion that took me longest to internalize: design the
+recovery first, and the happy path falls out as the special case
+where you didn't have to recover. Build the high-water marks before
+you build the adapters. Build the replay endpoint before you build
+the dashboard. Build the heartbeat detector before you build the
+"oh god, it's quiet" Slack channel.
+
+When the recovery path is load-bearing by construction, the system
+stops being scared of its upstreams. That changes everything else.
+
+---
+
+*Related: this post leans on the contract from [the idempotency
+post](/writing/idempotency-contract-before-perf) — the replay
+endpoint only works because the writes underneath it are safe to
+re-apply. The [latency post](/writing/latency-at-a-prop-trading-firm)
+sits one level above and explains why "recovery is the load-bearing
+path" rule shows up over and over at a trading firm.*

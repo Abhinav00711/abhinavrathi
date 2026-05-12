@@ -1,0 +1,59 @@
+---
+/**
+ * Self-hosted @font-face block, base-aware.
+ *
+ * Lives here (not in global.css) because Tailwind v4's CSS pass doesn't see
+ * Astro's `BASE_URL`. By keeping the rules in an Astro component we can derive
+ * font URLs from `import.meta.env.BASE_URL` — so flipping `base` in
+ * `astro.config.mjs` is the only edit needed when the site moves to
+ * `abhinavrathi.com`. No grep+replace across CSS or MDX.
+ *
+ * Mounted from <Layout> in <head>. `is:global` because the rules apply to
+ * every element under <html>; `set:html` because the URLs are server-rendered
+ * strings, not user content.
+ */
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const fontFace = `
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("${base}/fonts/Geist.woff2") format("woff2-variations"),
+       url("${base}/fonts/Geist.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("${base}/fonts/GeistMono.woff2") format("woff2-variations"),
+       url("${base}/fonts/GeistMono.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("${base}/fonts/InterVariable.woff2") format("woff2-variations"),
+       url("${base}/fonts/InterVariable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("${base}/fonts/JetBrainsMono.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url("${base}/fonts/JetBrainsMono-500.woff2") format("woff2");
+}
+`;
+---
+
+<style is:global set:html={fontFace} />

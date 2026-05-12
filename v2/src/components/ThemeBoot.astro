@@ -1,0 +1,41 @@
+---
+/**
+ * Theme boot — runs synchronously in <head> BEFORE first paint to prevent
+ * FOUC (a half-second of dark on a light-themed reader hurts trust).
+ *
+ * Resolution order:
+ *   1. localStorage `theme` → "dark" | "light"
+ *   2. localStorage `theme` === "system" or absent → matchMedia
+ *   3. fallback → "dark" (the site is dark-first)
+ *
+ * Sets `data-theme` on <html>. Tabs stay in sync via the `storage` event,
+ * which is wired in ThemeSwitcher (mounted in <body>).
+ */
+---
+
+<script is:inline>
+  (function () {
+    try {
+      // Trader easter egg wins if active. See KonamiTheme.astro.
+      if (localStorage.getItem("theme-trader") === "1") {
+        document.documentElement.setAttribute("data-theme", "trader");
+        return;
+      }
+      var stored = localStorage.getItem("theme");
+      var effective;
+      if (stored === "dark" || stored === "light") {
+        effective = stored;
+      } else {
+        // "system" or unset — read OS preference
+        effective =
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark";
+      }
+      document.documentElement.setAttribute("data-theme", effective);
+    } catch (_) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  })();
+</script>

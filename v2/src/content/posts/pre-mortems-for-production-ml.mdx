@@ -1,0 +1,193 @@
+---
+title: "Pre-mortems for production ML: the four prompts I run before shipping a model that touches money"
+summary: "Post-mortems are the industry's most-discussed engineering ritual. Pre-mortems — written before the model ships — are the most underused. Thirty minutes, four prompts, before any model goes behind a money-touching service."
+published: 2026-10-15
+draft: true
+tags: ["machine-learning", "pre-mortem", "production", "ml-systems"]
+---
+
+> **Outline.** Structural skeleton. Anecdotes anchored on already-public
+> work; no new TKTKs.
+
+## The setup
+
+Post-mortems are the industry's most-discussed engineering ritual.
+Pre-mortems — written *before* the model ships — are the most
+underused. The case for them gets sharper when the service is an
+ML service and the dollars are real: ML systems fail in classes that
+traditional services don't, and the cheapest version of that incident
+is the one you imagined the week before.
+
+This post argues for pre-mortems specifically for production ML. Thirty
+minutes per model, four prompts, written before the merge. The
+template is older than ML — what's new is which warning signs it
+catches when the artifact is a model and not a service.
+
+## What a pre-mortem actually is
+
+A pre-mortem is a writeup of the post-mortem you *would* write if this
+service caused an incident in production. It's not a risk register.
+It's a story. You write it in past tense, describing what went wrong,
+what you knew but didn't act on, who was paged, and what the action
+items ended up being.
+
+The four prompts below are the version I run on every model that goes
+behind a service. The order matters: each one feeds into the next.
+
+## Prompt 1: "It is six months from now. The model caused an incident. Describe it in one paragraph."
+
+The exercise is to write the *concrete* loss. Not "the model might
+degrade" — "the model returned a wrong classification on a
+production input, the downstream system acted on it, and a trader
+spent two hours unwinding the position the next morning." Specific
+inputs, specific downstream actions, specific human cost.
+
+If you can't write that paragraph, the model isn't ready to ship.
+Either you don't know what the downstream system does with the
+prediction (worse), or the prediction doesn't actually matter (then
+why ship it). Both are answers; both are useful.
+
+The ML-specific version of this prompt forces a sentence I've watched
+teams duck: **what does a single wrong prediction cost?** If the
+answer is "nothing, we aggregate" — the unit of work is the
+aggregation, not the prediction, and the pre-mortem is about
+aggregation behavior. If the answer is "a dollar amount", then the
+prompt has done its job: you now have a budget for the next three
+prompts.
+
+## Prompt 2: "What did we know about this model, but not act on?"
+
+The hardest prompt. It forces explicit listing of the warning signs
+the team chose to ignore. For ML systems, the list tends to be
+familiar:
+
+- The eval set was the wrong distribution. You knew. You shipped.
+- The output sanity check would have caught this. You didn't add it.
+- Inputs in production drifted from training. You graphed accuracy
+  but not input statistics.
+- The model file was loaded from "latest" at runtime, not pinned.
+  You knew. You shipped Friday afternoon.
+- The on-call engineer can't tell whether a wrong prediction is the
+  model's fault or the upstream caller's. You knew. You shipped
+  anyway.
+
+Write down the three most-relevant warning signs *for this specific
+model*. Promote each to a P0 fix before the merge, or write the
+sentence "we accepted this risk because…" with an actual reason. Not
+"we'll get to it" — that's the prompt working correctly. The point
+is to force the choice into the open.
+
+## Prompt 3: "The on-call engineer is paged at 2 AM. Can they tell whether the model is the problem?"
+
+This is the prompt that catches the ML-specific failure mode: the
+model fails *silently*. The handler returned 200. The latency was
+within budget. The downstream system acted on the prediction. The
+trader noticed something wrong with the resulting position. The
+on-call engineer is paged.
+
+Now: can they tell whether the model is the problem?
+
+The cheap fixes the prompt surfaces:
+
+- **Log the model version** with every prediction. The version is a
+  hash of the weight file pinned at deploy time, not a tag.
+- **Log the input schema** (shape, dtype, distribution summary) with
+  every prediction. The data the on-call sees should reconstruct
+  what the model saw.
+- **Log the prediction with confidence**, not just the predicted
+  class. "Class 3 at 0.51 confidence" is a different incident from
+  "Class 3 at 0.99 confidence". Both are wrong; only one is
+  surprising.
+- **Ship a one-screen runbook**: how to roll back to the prior model,
+  how to disable the model and fall back, how to replay a prediction
+  with the schema captured at the time.
+
+If the on-call can't answer "was the model the problem" in two
+minutes from the page, the runbook isn't ready and the model
+shouldn't ship.
+
+## Prompt 4: "What would the post-mortem action items be? Write them now."
+
+The action items from a real post-mortem are usually a small list of
+boring infrastructure investments — add a heartbeat, add an eval
+metric, add a runbook, add a feature flag. The pre-mortem prompt is
+this: write those action items *now*, before the model is in
+production.
+
+For ML systems the standard ones are:
+
+- An offline eval harness that runs on every PR and gates merges on
+  no regression vs. the production baseline.
+- An input-drift monitor that alarms when production input
+  distribution moves more than X from training.
+- A model-version-pin enforced at deploy time, not at runtime.
+- A fallback path: prior-model prediction, static default, or
+  documented 503. Pick one and put it in the handler.
+- An on-call runbook with three commands and zero judgment calls.
+
+If the post-mortem action items are "add idempotency, add a
+heartbeat, add a runbook" — *do them now, before merging*. The
+pre-mortem just told you the bar.
+
+## Why pre-mortems work for ML specifically
+
+Three reasons, slightly different from the generic-service version:
+
+- **They re-rank the work.** A model with 0.92 AUC and no eval
+  harness is worse than a model with 0.88 AUC and an eval harness.
+  The pre-mortem promotes the harness to P0; without it, the AUC
+  conversation wins by default.
+- **They reveal the absent observability.** Half the time the answer
+  to "we knew but didn't act" is "we couldn't have known — there
+  was no metric." For ML, the missing metric is usually input
+  distribution, prediction confidence, or model version. Add the
+  metric.
+- **They de-personalize the risk conversation.** Nobody has to say
+  "I think this model is risky"; the document already says it. This
+  matters more for ML systems than for normal services because the
+  team often *includes* the person who trained the model, and "your
+  thing might be wrong" is a hard sentence to say out loud.
+
+## The 30-minute version
+
+The practical workflow:
+
+- Write the four answers in a shared doc. Ten minutes for the loss
+  paragraph; ten for the warning-signs list; five for the on-call
+  story; five for the action items.
+- Read them out loud to one teammate. The reading-out-loud step is
+  load-bearing — it catches the answers that sounded fine in your
+  head and don't survive a sentence.
+- Capture the three highest-impact action items and block merge
+  until they land.
+
+That's it. Thirty minutes, one teammate, three blockers. The model
+gets shipped after them, not before.
+
+## What pre-mortems aren't
+
+Equally important:
+
+- They aren't a risk register. They're a story you write once.
+- They aren't a substitute for the eval harness; they're a
+  *complement* — pre-mortems catch what the eval can't (input
+  drift in the wild, on-call gaps, bad defaults).
+- They aren't a substitute for incident response; they're an attempt
+  to make response unnecessary.
+- They aren't permission to ship. They're an honesty filter — if
+  you can't write the loss paragraph, the model isn't ready.
+
+## Closing
+
+The cheapest incident is the one you imagined first. For ML systems
+the imagined-first version is especially valuable because the
+production failure modes are weirder than the training-time ones, and
+the team is often new to running this artifact behind a service. The
+four prompts won't catch every incident. They'll catch the ones the
+team has actually thought about — and that's exactly the set worth
+investing thirty minutes to surface.
+
+---
+
+*The full ML-deploy how-to is in the [deploying-your-first-model
+post](/writing/deploying-your-first-model-behind-flask).*

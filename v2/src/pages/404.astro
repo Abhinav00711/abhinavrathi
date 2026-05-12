@@ -1,0 +1,26 @@
+---
+import Layout from "@layouts/Layout.astro";
+import Nav from "@components/Nav.astro";
+import Footer from "@components/Footer.astro";
+import CommandPalette from "@components/CommandPalette.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<Layout title="404 — Abhinav Rathi" description="Page not found." noindex>
+  <Nav />
+  <main id="main" class="grid min-h-[60vh] place-items-center pt-32">
+    <div class="container-prose text-center">
+      <p class="eyebrow">404</p>
+      <h1 class="headline mt-4" style="font-size: var(--text-h2);">
+        Not on this server.
+      </h1>
+      <p class="mt-4" style="color: var(--color-muted);">
+        The link is wrong, or the page moved during the rebuild.
+      </p>
+      <a href={`${base}/`} class="btn btn-primary mt-8">Back home →</a>
+    </div>
+  </main>
+  <Footer />
+  <CommandPalette />
+</Layout>

@@ -1,0 +1,159 @@
+---
+title: "Cache the aggregate, not the query"
+summary: "A pattern I keep reaching for in trading-firm dashboards: cache the rolled-up answer, not the raw query — the read path stays warm and cache invalidation stops being everyone's problem."
+published: 2026-07-15
+draft: true
+tags: ["caching", "redis", "backend", "production"]
+---
+
+The first time I built a trader dashboard at Axxela, I did what every
+backend tutorial tells you to do: I found the slow queries and cached
+them. It worked for about three weeks. After three weeks the cache
+schema looked like a graph somebody had let a cat walk across — keys
+that invalidated each other, TTLs nobody could justify, and a
+"refresh button" we'd added because we couldn't be confident the
+numbers were current.
+
+Caching at the query level felt right and was wrong. The fix was to
+move the cache up the stack — past the queries, past the views, into
+the thing the user was actually reading. This is a short post about
+that pattern: **cache the aggregate, not the query**.
+
+## The wrong question
+
+"What query is slow?" is the question that leads to per-query caches.
+It's the right question for a profiler and the wrong question for an
+architecture. Per-query caches turn into an invalidation graph nobody
+can reason about after six months. Adding a column to a table
+invalidates seventeen caches downstream and nobody is sure which.
+
+The right question is: **"What aggregate is the user actually
+reading?"**
+
+If a trader looks at a dashboard, they're not reading a query. They're
+reading a number — net position in instrument X, P&L for strategy Y,
+exposure across portfolio Z. The number is the aggregate. The query
+is one of many ways the system might compute it. Cache the number.
+Then the queries underneath are free to change without anyone
+auditing the cache.
+
+## The aggregate-cache pattern
+
+There are three parts to the pattern, and they have to land together.
+
+**1. Define the aggregate explicitly.** Not the rows; the rolled-up
+answer the UI shows. Per-trader exposure. Per-strategy P&L window.
+Per-instrument net position. Each aggregate gets a name, a key, a
+recompute function, and a TTL — written down once, in one file. If
+you can't name an aggregate, you don't have one; you have a query
+that happens to be slow.
+
+**2. Compute the aggregate on a write barrier, not a read barrier.**
+When the underlying state changes in a way that *materially* changes
+the aggregate, recompute. Not on every write — on the meaningful
+ones, defined once. For a position aggregate, a meaningful write is
+"a new fill landed". For a P&L aggregate, it's "the end-of-minute
+mark refreshed". The barrier is the place you hook; the aggregate
+behind the barrier stays read-warm.
+
+**3. Read the aggregate from cache; fall back to recomputation on
+miss.** Miss is rare and expected to be slow. Don't optimize the miss
+path; optimize the write barrier so misses don't happen. The shape
+is read-warm, write-cold — the opposite of "cache the query result
+with a 30s TTL and hope".
+
+If you keep all three together, the cache stops being a performance
+optimization and starts being part of the data model. That's a shift
+worth making.
+
+## What this gives you
+
+A few things I noticed only after running this pattern in production
+on the trader dashboard at Axxela. The dashboard reads from a Redis
+aggregate cache with a 30-second TTL on the hot path and falls
+through to MySQL only on miss. p95 page load on the busiest screen
+sits under 400ms; the database stays quiet during trading hours
+because the read load lives in Redis. The interesting effects weren't
+the latency numbers, though. The interesting effects were the
+secondary ones:
+
+**The cache becomes documentation.** A fresh engineer reading the
+cache schema gets a one-screen tour of every aggregate the system
+actually surfaces. Before the rewrite, the same tour would have
+needed somebody to talk through three days of queries and joins.
+After the rewrite, the aggregates *are* the surface.
+
+**The invalidation graph collapses to a list.** Each aggregate names
+its inputs; the dependency graph is `aggregates × inputs`, not
+`queries × tables`. The number of aggregates is small (single-digit
+on this dashboard). The number of queries was not. Reasoning got
+easier in a way I didn't expect.
+
+**You stop arguing about TTLs.** TTL becomes "how long before a stale
+read is *materially* wrong", which forces a real product
+conversation. Intraday position aggregates have a TTL of seconds.
+End-of-day exposure has a TTL of an hour. The TTL is no longer a
+hedge against bugs you might have; it's a statement about how
+quickly the answer becomes wrong in the real world.
+
+## What it doesn't give you
+
+The honest section. The pattern is not free, and I've watched it
+become the wrong choice a few times:
+
+It doesn't help with truly per-row reads. *"Show me this exact
+trade"* is not an aggregate; it's a lookup, and the table is the
+right place for it. If most of your reads are point lookups, the
+aggregate cache adds a layer without adding leverage.
+
+It assumes you have a write barrier you can hook. If your data
+arrives in a hundred microservices that don't notify each other, you
+have to build the notification first. The aggregate cache is the
+*destination*; the barrier is the *plumbing*. Build the plumbing or
+this pattern doesn't land.
+
+It centralizes the aggregate definitions, which is a feature in a
+small team and a bottleneck in a big one. The team I shipped this
+on was four people; one file of aggregate definitions felt clean. At
+forty people, that one file would be a merge-conflict factory and
+the pattern would have to be sharded. Watch for the transition.
+
+## The trader-dashboard example
+
+The dashboard at Axxela serves something like 10–20 daily active
+users (traders + ops) during the trading window. Behind the UI sit a
+handful of aggregates — intraday position, batch status, fill
+throughput, queue depth. Each has a name, a Redis key shape, a TTL
+ranging from 5 seconds (intraday position) to a few minutes
+(end-of-day exposure), and a recompute function that reads from
+MySQL and stamps the result.
+
+The write barriers are explicit. A new fill lands → the position
+aggregate for the affected instrument is invalidated and recomputed
+inline. A batch finishes → the batch-status aggregate is updated by
+the batch itself, not by anyone polling it. The dashboard never
+polls MySQL on the hot path; the hot path is Redis-only.
+
+What this bought us in practice: p95 well under 400ms on the busiest
+screen, MySQL load on the dashboard reduced by a comfortable
+margin during trading hours, and — the part that mattered to
+*me* — the cache layer stayed legible. Six months in, I could still
+explain what every key was for, what its TTL meant, and which write
+path kept it warm. That's a different kind of win than latency
+numbers.
+
+## Closing
+
+The meta-lesson is that caching is a question about *what the user
+is actually asking*, not about *which query is slow*. When the cache
+sits at the aggregate layer, the questions change in good ways:
+TTLs become product decisions, the cache schema becomes
+documentation, and the invalidation graph stops being a thing
+nobody understands. Slow queries don't disappear — they just stop
+being the thing the cache is trying to solve.
+
+---
+
+*Related: the [latency post](/writing/latency-at-a-prop-trading-firm)
+covers the broader framing of "measure the unit of work, not the
+service" that this pattern fits inside.*

@@ -1,0 +1,164 @@
+---
+/**
+ * Konami-code easter egg — toggles the "Trader Desktop" theme.
+ *
+ * Sequence: ↑ ↑ ↓ ↓ ← → ← → B A
+ *
+ * The trader theme (`data-theme="trader"`) is a near-black surface with a
+ * Bloomberg-orange accent and a mono-only typographic system — pure
+ * personality, zero recruiter ROI, but a tasteful nod to the trading-desk
+ * aesthetic for anyone who already knows the cheat code.
+ *
+ * Persistence:
+ *   - localStorage `theme-trader` = "1" while active.
+ *   - Trader takes precedence over the standard light/dark choice.
+ *   - Cycling the standard theme via `T` clears trader.
+ *
+ * Why a separate flag (not just a 3rd value of `theme`): keeps the
+ * ThemeSwitcher's three-state model intact and lets both systems coexist
+ * without entangling the cycle order. Resolved at boot in ThemeBoot too.
+ *
+ * Toast: 1.5s pill at bottom-center confirming activation/deactivation.
+ * Gated by `prefers-reduced-motion` so the slide-up is replaced by a fade.
+ */
+---
+
+<div
+  class="kt-toast"
+  role="status"
+  aria-live="polite"
+  data-konami-toast
+  hidden
+></div>
+
+<script>
+  (() => {
+    const SEQUENCE = [
+      "ArrowUp",
+      "ArrowUp",
+      "ArrowDown",
+      "ArrowDown",
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowLeft",
+      "ArrowRight",
+      "b",
+      "a",
+    ];
+    const STORAGE = "theme-trader";
+
+    let buffer: string[] = [];
+    const root = document.documentElement;
+    const toast = document.querySelector<HTMLElement>("[data-konami-toast]");
+
+    const showToast = (msg: string) => {
+      if (!toast) return;
+      toast.textContent = msg;
+      toast.hidden = false;
+      // force reflow so the transition fires reliably
+      void toast.offsetWidth;
+      toast.dataset.visible = "true";
+      window.setTimeout(() => {
+        toast.dataset.visible = "false";
+        window.setTimeout(() => {
+          toast.hidden = true;
+        }, 220);
+      }, 1500);
+    };
+
+    const apply = (on: boolean) => {
+      if (on) {
+        root.setAttribute("data-theme", "trader");
+        localStorage.setItem(STORAGE, "1");
+      } else {
+        localStorage.removeItem(STORAGE);
+        // Re-resolve normal theme (mirrors ThemeBoot's logic).
+        const stored = localStorage.getItem("theme");
+        const next =
+          stored === "dark" || stored === "light"
+            ? stored
+            : window.matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark";
+        root.setAttribute("data-theme", next);
+      }
+    };
+
+    const isActive = () => localStorage.getItem(STORAGE) === "1";
+
+    // Boot — re-apply if the page loaded with the flag set. ThemeBoot also
+    // does this synchronously to prevent FOUC; this is the post-hydration
+    // belt-and-braces in case Boot ran before storage was available.
+    if (isActive()) apply(true);
+
+    // Sequence detection.
+    document.addEventListener("keydown", (e) => {
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      const editable = (document.activeElement as HTMLElement | null)?.isContentEditable;
+      if (tag === "INPUT" || tag === "TEXTAREA" || editable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      // Normalize Shift'd 'B'/'A' so caps lock or shift still triggers.
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      buffer.push(k);
+      if (buffer.length > SEQUENCE.length) buffer = buffer.slice(-SEQUENCE.length);
+      if (buffer.length !== SEQUENCE.length) return;
+
+      const matches = buffer.every((b, i) => b === SEQUENCE[i]);
+      if (!matches) return;
+      buffer = [];
+
+      const next = !isActive();
+      apply(next);
+      showToast(
+        next
+          ? "trader desktop · on · ↑↑↓↓←→←→ba to exit"
+          : "trader desktop · off",
+      );
+    });
+
+    // If the user cycles the normal theme via `T` while trader is on, drop
+    // trader so the standard switcher stays predictable.
+    document.addEventListener("theme:cycle", () => {
+      if (isActive()) apply(false);
+    });
+  })();
+</script>
+
+<style>
+  .kt-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%) translateY(8px);
+    padding: 8px 14px;
+    border: 1px solid var(--color-hairline-strong);
+    background: var(--color-panel);
+    color: var(--color-body);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    border-radius: var(--radius-pill);
+    box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    transition:
+      opacity 200ms ease,
+      transform 200ms ease;
+    pointer-events: none;
+    z-index: 80;
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+  }
+  .kt-toast[data-visible="true"] {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .kt-toast {
+      transition: opacity 200ms ease;
+      transform: translateX(-50%);
+    }
+    .kt-toast[data-visible="true"] {
+      transform: translateX(-50%);
+    }
+  }
+</style>

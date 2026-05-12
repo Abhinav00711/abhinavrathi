@@ -1,0 +1,41 @@
+---
+import { getCollection, render } from "astro:content";
+import CaseStudy from "@layouts/CaseStudy.astro";
+
+export async function getStaticPaths() {
+  const all = (await getCollection("projects", (p) => p.data.published))
+    .sort((a, b) => a.data.order - b.data.order);
+
+  return all.map((entry, i) => ({
+    params: { slug: entry.id },
+    props: {
+      entry,
+      prev: i > 0 ? all[i - 1] : undefined,
+      next: i < all.length - 1 ? all[i + 1] : undefined,
+    },
+  }));
+}
+
+const { entry, prev, next } = Astro.props;
+const { Content, remarkPluginFrontmatter } = await render(entry);
+const readTime: string | undefined = remarkPluginFrontmatter?.minutesRead;
+---
+
+<CaseStudy
+  slug={entry.id}
+  title={entry.data.title}
+  summary={entry.data.summary}
+  role={entry.data.role}
+  year={entry.data.year}
+  tech={entry.data.tech}
+  metrics={entry.data.metrics ?? []}
+  anonymized={entry.data.anonymized}
+  repo={entry.data.repo}
+  live={entry.data.live}
+  cover={entry.data.cover}
+  readTime={readTime}
+  prev={prev ? { id: prev.id, title: prev.data.title } : undefined}
+  next={next ? { id: next.id, title: next.data.title } : undefined}
+>
+  <Content />
+</CaseStudy>

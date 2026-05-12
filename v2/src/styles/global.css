@@ -1,0 +1,380 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+ * Self-hosted fonts: see <FontFace /> (mounted in Layout.astro <head>).
+ * Kept out of this stylesheet so the URLs can be base-aware
+ * (Tailwind v4's CSS pass doesn't see Astro's BASE_URL).
+ * --------------------------------------------------------------------------*/
+
+/* ---------------------------------------------------------------------------
+ * Design tokens — single source of truth.
+ * Tailwind v4 picks these up automatically and exposes utilities like
+ * `bg-surface`, `text-body`, `border-hairline`, `text-accent`, `font-display`.
+ * --------------------------------------------------------------------------*/
+@theme {
+  /* surface */
+  --color-surface: #0a0a0a;
+  --color-panel: #141416;
+  --color-hairline: #1f1f22;
+  --color-hairline-strong: #2a2a2d;
+
+  /* text */
+  --color-body: #e6e6e8;
+  --color-muted: #9a9aa2;
+  --color-faint: #7e7e86;
+
+  /* accent — cobalt, single signature color
+   *
+   *   --color-accent       Surface fill / borders / icons. Original cobalt.
+   *                        Measured ~3.7:1 on near-black surface — fine for
+   *                        large text & non-text UI per WCAG, NOT for body.
+   *
+   *   --color-accent-text  Brighter cobalt used wherever the accent sits as
+   *                        text on the dark surface (link hover, mono labels,
+   *                        chip-text-on-hover). Measured ~5.4:1 on #0a0a0a,
+   *                        clears WCAG AA 4.5:1 for normal text.
+   *
+   *   In light theme both collapse to the darker cobalt.
+   */
+  --color-accent: #3d52fe;
+  --color-accent-text: #6679ff;
+  --color-accent-soft: #0f1b5c;
+  --color-accent-glow: #3d52fe26; /* 15% */
+
+  /* fluid type scale (clamp-based) */
+  --text-display: clamp(48px, 6vw, 96px);
+  --text-h1: clamp(36px, 4vw, 64px);
+  --text-h2: clamp(28px, 3vw, 44px);
+  --text-h3: clamp(22px, 2vw, 28px);
+  --text-body-size: 17px;
+  --text-small: 14px;
+  --text-mono-size: 13px;
+
+  /* fonts — self-hosted in Phase 1.5; system fallbacks chosen to feel
+   * close enough that the visual direction holds before swap-in. */
+  --font-display: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Geist Mono", ui-monospace, "SF Mono",
+    "Menlo", "Consolas", monospace;
+
+  /* radii */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  /* spacing scale (4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 / 96 / 128) is the
+   * Tailwind default — we just commit to using only those steps. */
+}
+
+/* ---------------------------------------------------------------------------
+ * Base
+ * --------------------------------------------------------------------------*/
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-grid: radial-gradient(
+    circle at 1px 1px,
+    rgba(255, 255, 255, 0.045) 1px,
+    transparent 0
+  );
+}
+
+/* ---------------------------------------------------------------------------
+ * Light theme — kept restrained on purpose. Same accent, inverted surfaces.
+ * The site is dark-first; light is a deliberate, lower-contrast read mode for
+ * recruiters who skim everything in one tab and need parity with their OS.
+ * --------------------------------------------------------------------------*/
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-surface: #fafaf9;
+  --color-panel: #ffffff;
+  --color-hairline: #e7e7ea;
+  --color-hairline-strong: #d6d6db;
+  --color-body: #1a1a1d;
+  --color-muted: #5b5b63;
+  --color-faint: #717179;
+  --color-accent: #2436c7;
+  --color-accent-text: #2436c7; /* light theme — same darker cobalt; ≥7:1 on #fafaf9 */
+  --color-accent-soft: #c9d2ff;
+  --color-accent-glow: #2436c726;
+  --bg-grid: radial-gradient(
+    circle at 1px 1px,
+    rgba(0, 0, 0, 0.06) 1px,
+    transparent 0
+  );
+}
+:root[data-theme="light"] .headline,
+:root[data-theme="light"] [class*="text-white"] {
+  color: #0a0a0a !important;
+}
+:root[data-theme="light"] .btn-primary {
+  color: #ffffff;
+}
+:root[data-theme="light"] header {
+  background: color-mix(in srgb, var(--color-surface) 80%, transparent) !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Trader desktop — Konami easter egg.
+ *
+ * Triggered by the ↑↑↓↓←→←→BA sequence (see KonamiTheme.astro). Bloomberg-
+ * orange accent on a deeper black, with display text forced to mono so the
+ * whole page reads like a trading terminal. Pure personality; recruiters who
+ * find it spread the word. Anyone who doesn't never sees it.
+ * --------------------------------------------------------------------------*/
+:root[data-theme="trader"] {
+  color-scheme: dark;
+  --color-surface: #050505;
+  --color-panel: #0e0e0e;
+  --color-hairline: #1a1a1a;
+  --color-hairline-strong: #262626;
+  --color-body: #e0e0e0;
+  --color-muted: #a0a08c;
+  --color-faint: #5d5d52;
+  --color-accent: #ff8000;
+  --color-accent-text: #ffb04a; /* clears AA on the deeper black */
+  --color-accent-soft: #3a1d00;
+  --color-accent-glow: #ff800033;
+  --bg-grid: linear-gradient(
+      to right,
+      rgba(255, 128, 0, 0.04) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(255, 128, 0, 0.04) 1px,
+      transparent 1px
+    );
+}
+:root[data-theme="trader"] body {
+  background:
+    var(--bg-grid) 0 0 / 32px 32px,
+    var(--color-surface);
+}
+:root[data-theme="trader"] .headline,
+:root[data-theme="trader"] [class*="text-white"] {
+  font-family: var(--font-mono) !important;
+  letter-spacing: -0.01em !important;
+}
+:root[data-theme="trader"] header {
+  background: color-mix(in srgb, var(--color-surface) 75%, transparent) !important;
+}
+
+html {
+  background: var(--color-surface);
+  color: var(--color-body);
+  font-family: var(--font-sans);
+  font-size: var(--text-body-size);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+  scroll-padding-top: 96px;
+}
+
+body {
+  min-height: 100dvh;
+  background:
+    var(--bg-grid) 0 0 / 24px 24px,
+    var(--color-surface);
+}
+
+::selection {
+  background: var(--color-accent);
+  color: white;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Focus ring — the plan calls for 2px solid accent, visible only on keyboard. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Scrollbar — subtle, on-brand. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-hairline-strong) transparent;
+}
+
+/* ---------------------------------------------------------------------------
+ * Reusable utilities
+ * --------------------------------------------------------------------------*/
+.section {
+  padding-block: clamp(64px, 9vw, 128px);
+}
+.container-prose {
+  width: min(1120px, 100% - 48px);
+  margin-inline: auto;
+}
+.hairline {
+  border-color: var(--color-hairline);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-size);
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+  text-transform: uppercase;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+.headline {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: white;
+}
+
+/* Chip — used for tech stack pills. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-body);
+  background: var(--color-panel);
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+.chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+/* Button — two variants: primary (filled accent), secondary (hairline). */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: 15px;
+  letter-spacing: -0.005em;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease,
+    color 160ms ease;
+}
+.btn:hover {
+  transform: translateY(-1px);
+}
+.btn-primary {
+  background: var(--color-accent);
+  color: white;
+  box-shadow: 0 0 0 1px var(--color-accent),
+    0 8px 24px -8px var(--color-accent-glow);
+}
+.btn-primary:hover {
+  background: #2a3fff;
+}
+.btn-secondary {
+  background: var(--color-panel);
+  color: var(--color-body);
+  border: 1px solid var(--color-hairline-strong);
+}
+.btn-secondary:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+/* Kbd hint */
+kbd,
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--color-hairline-strong);
+  background: var(--color-panel);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+/* Reveal-on-intersect (gated by prefers-reduced-motion). */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 320ms ease-out, transform 320ms ease-out;
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Cross-document View Transitions — progressive enhancement.
+ * Browsers that support `@view-transition: { navigation: auto }` (Chrome 126+,
+ * Safari 18.2+) get a soft cross-fade between same-origin pages and a
+ * matched-name morph on case-study titles. Everything else hard-cuts.
+ * --------------------------------------------------------------------------*/
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Skip-to-content link (accessibility)
+ * --------------------------------------------------------------------------*/
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 16px;
+  padding: 8px 14px;
+  background: var(--color-accent);
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  z-index: 100;
+}
+.skip-link:focus {
+  top: 16px;
+}

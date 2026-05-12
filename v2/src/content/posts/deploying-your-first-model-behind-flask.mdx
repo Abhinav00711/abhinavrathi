@@ -1,0 +1,199 @@
+---
+title: "What I wish I'd known before deploying my first model behind a Flask service"
+summary: "Training a model is half the job. The other half is the loop around it — the warmed worker, the eval harness, the latency budget, the failure mode you didn't graph. A practical how-to from three years of doing it the hard way."
+published: 2026-09-15
+draft: true
+tags: ["machine-learning", "production", "flask", "ml-systems"]
+---
+
+> **Outline.** Structural skeleton. Anecdotes anchored on already-public
+> work (RespiScan); no new TKTKs.
+
+## The setup
+
+The first time I shipped a model into production, I thought the hard
+part was behind me. The notebook converged, the metrics looked
+respectable, the Flask handler returned a number. Eight hours later
+the service was down because the worker that loaded the model had been
+recycled and the next request paid the cold-start cost — about three
+seconds, well outside our latency budget. I had built every part of
+this system *except* the part that decides whether it's actually
+serving traffic.
+
+The lesson is the one most "how to deploy ML" posts skip: **the model
+is the easy half**. The loop around the model — warmed worker, eval
+harness, latency budget, recovery story — is where the production
+problems live. This post is the how-to I wish someone had given me
+that week.
+
+## What "behind a Flask service" actually means
+
+The model is now a *service component*, not an artifact. It has a
+request boundary, a worker process, a memory footprint, a load
+profile, and a failure mode. Treating it as a Python object you
+happened to import is the bug that produces all the others.
+
+Three things change the moment your model lives behind a request
+boundary:
+
+- It has a **p95**, not just an accuracy number.
+- It can **fail** without crashing — return the wrong thing
+  confidently.
+- It has a **recovery story** the rest of the service has to honor.
+
+The rest of the post is one section per surprise, in the order they
+hit me.
+
+## Surprise 1: the cold-start tax
+
+Loading a model at request-time is fine for a notebook and
+catastrophic for a service. The first request after a worker boot
+pays the full load cost — weights into memory, framework warm-up,
+GPU init if applicable. That cost can be three orders of magnitude
+larger than steady-state inference.
+
+The fix is boring and load-bearing: **warmed workers**. Load the model
+in the worker's startup hook, not the request handler. Add a `/ready`
+endpoint that returns 200 only after the model object is loaded and
+has answered one synthetic request. Wire the load balancer to *that*
+endpoint, not `/health`. Synthetic warm-up belongs in startup, not in
+the first user request.
+
+(See the [RespiScan case study](/work/respiscan) for the exact warm-up
+pattern — load once, gate health on a known-good synthetic input,
+restart the worker on inference failure.)
+
+## Surprise 2: the latency budget you didn't write down
+
+p95 inference latency is not the latency the user feels. End-to-end
+latency is: preprocessing + queue wait + inference + postprocessing +
+serialization. Each of those has a number. Add them up. Compare to the
+p95 your product actually promised.
+
+The mistake I made twice: optimizing the inference number because it's
+the one the model framework reports. The user-visible number was
+dominated by preprocessing (image decode + resize, in the RespiScan
+case). The model was already fast enough; I was looking at the wrong
+profile.
+
+**The rule:** write the latency budget down before you optimize.
+Total budget = X ms. Allocate: 10 % preprocessing, 60 % inference,
+20 % postprocessing, 10 % serialization + network. Now you know which
+number to chase.
+
+## Surprise 3: confident wrongness
+
+The scariest failure mode in a production model isn't the one that
+throws an exception — it's the one that returns a sensible-looking
+answer that's wrong. The handler doesn't know. The upstream code
+doesn't know. The user doesn't know until later, often too late.
+
+Two cheap guardrails catch most of these:
+
+- **Input-distribution check.** The model was trained on inputs in a
+  particular range. Reject (or flag) inputs outside that range at the
+  handler boundary. Don't trust the model to do this for you — it
+  won't.
+- **Output sanity check.** If the model returns a probability, assert
+  it's in [0, 1]. If it returns a class index, assert it's in your
+  label set. If it returns a number with units, assert the magnitude
+  is plausible. Five lines each, saves you from the worst class of
+  incident.
+
+The deeper version of this guardrail is the eval harness, which is
+the next surprise.
+
+## Surprise 4: you need an eval harness, not a test suite
+
+Unit tests are necessary but not sufficient. A model passes unit
+tests by returning *anything*. What you want is an **offline eval
+harness** — a frozen dataset of inputs with expected outputs, replayed
+against every candidate model, with the result compared against the
+production baseline.
+
+The harness lives next to the service code, not in the notebook. Each
+PR that touches the model runs the harness; the result is a number
+(accuracy, AUC, MAE — whichever your product cares about) plus a
+delta from the current production model. **A model PR with no eval
+delta is the same as a code PR with no tests.**
+
+The harness is what lets you say "this PR doesn't regress" without
+hand-eyeballing predictions. It's also what lets you roll back: the
+harness tells you the prior model was strictly better.
+
+(RespiScan's eval harness is described in the case study; the same
+pattern fits a Flask service that wraps any model.)
+
+## Surprise 5: failure modes the framework hides
+
+Frameworks (PyTorch, TensorFlow, scikit-learn) don't crash the way
+Python code does. They return tensors of the wrong shape, accept a
+dtype mismatch silently, or broadcast in a way you didn't expect.
+Half of "the model is broken" debugging is actually "the framework
+did something I didn't ask for".
+
+The defense:
+
+- **Schema your inputs.** A pydantic / msgspec model at the handler
+  boundary, asserting shapes and dtypes before the model sees them.
+- **Schema your outputs.** Same thing on the way out.
+- **Log the schema, not just the data.** When a prediction is wrong
+  in production, you want to see the shape and dtype of the tensor
+  that produced it, not just the prediction.
+
+## Surprise 6: the model is also a recovery problem
+
+When the worker crashes mid-inference, what happens to the request?
+When the GPU runs out of memory, what does the handler return? When
+the model file becomes corrupted, how do you know? These are the same
+recovery questions you'd ask of any service — they just don't show up
+in ML tutorials because tutorials end at "the model predicts."
+
+A minimal recovery checklist:
+
+- The worker can be restarted without losing served traffic (warmed
+  workers + a load balancer health gate).
+- The model file is versioned and pinned at deploy time — not loaded
+  from "latest" at runtime.
+- A model failure returns a fallback response (the prior model's
+  prediction, a static default, a 503 — pick one and document it),
+  not an uncaught exception that crashes the worker.
+
+(See the [recovery post](/writing/recovery-is-the-path) for the
+broader pattern.)
+
+## A 30-minute checklist for the next model you ship
+
+If you only do one thing from this post: before you merge the PR that
+puts a model behind a service, answer these in writing.
+
+- What's the cold-start cost, and how does the worker warm up?
+- What's the end-to-end latency budget, and where is each slice
+  spent?
+- What's the input-distribution check at the handler boundary?
+- What's the output sanity check?
+- What's the offline eval harness, and what's the delta vs.
+  production today?
+- What happens when the worker crashes mid-inference?
+- Which model file version is pinned in this deploy?
+
+If you can't answer one of these in a sentence, the model isn't ready
+to ship — even if the offline metrics are great.
+
+## Closing
+
+The cliché is "training is 10 % of the job, the rest is plumbing." The
+cliché is right. The under-told part is that the plumbing isn't
+generic — it's a specific set of guardrails that exist because
+production models fail in *specific* ways. Cold-start tax, budget
+mis-allocation, confident wrongness, framework-hidden bugs, recovery
+gaps. Each one is a separate lesson; together they're the loop around
+the model.
+
+The model is the easy half. The loop is the rest.
+
+---
+
+*The [pre-mortems for production ML
+post](/writing/pre-mortems-for-production-ml) walks through the four
+prompts I run before shipping any model that touches money.*

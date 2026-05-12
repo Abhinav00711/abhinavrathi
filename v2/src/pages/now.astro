@@ -1,0 +1,185 @@
+---
+import Layout from "@layouts/Layout.astro";
+import Nav from "@components/Nav.astro";
+import Footer from "@components/Footer.astro";
+import CommandPalette from "@components/CommandPalette.astro";
+import ScrollProgress from "@components/ScrollProgress.astro";
+import RevealMotion from "@components/RevealMotion.astro";
+import GitHubStats from "@components/GitHubStats.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Edit this single block once a month. Keep it short and concrete — the page
+// is "what I'm doing this month", not "what I'd like to be doing".
+const lastUpdated = "2026-05-11";
+
+// Each section is intentionally small. If a row would need explaining, it's
+// the wrong row. If you can't say it without a hedge, leave it out.
+const shipping = [
+  "Backend services at Axxela — position-recon, order-ingestion, trader-dashboard rolling forward.",
+  "v2 of this site — Phase 2 polish + Phase 3 kickoff this month.",
+];
+const reading = [
+  "Designing Data-Intensive Applications (re-read, the Stream Processing chapter).",
+  "Will Larson — An Elegant Puzzle (sampling, between projects).",
+];
+const learning = [
+  "Tightening my SQL window-function vocabulary.",
+  "Watching what Linear's engineering team writes about idempotency.",
+];
+const looking = [
+  "Senior backend / platform / trading-infra roles.",
+  "Kolkata-based; remote, hybrid, or relocation considered.",
+  "Open to selective contract work that doesn't conflict with Axxela.",
+];
+const notDoing = [
+  "Side projects that compete with Axxela for production time.",
+  "Junior roles, contract-only-no-FT, web3 unless it's trading-related.",
+];
+
+// Note for future Abhinav: this page is the Sivers convention. The point
+// isn't completeness — it's freshness. Two short bullets per section beats
+// six aspirational ones.
+
+const fmt = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+const lastUpdatedDate = new Date(lastUpdated);
+---
+
+<Layout
+  title="/now — Abhinav Rathi"
+  description="What Abhinav is shipping, reading, learning, and looking for — updated monthly."
+  canonicalPath="/now/"
+>
+  <ScrollProgress />
+  <Nav />
+
+  <main id="main" class="pt-32 pb-24">
+    <article class="container-prose" style="max-width: 720px;">
+      <a
+        href={`${base}/`}
+        class="font-mono text-[13px]"
+        style="color: var(--color-muted);"
+        >← Home</a
+      >
+
+      <header class="mt-8">
+        <p class="eyebrow mb-3">/now</p>
+        <h1 class="headline" style="font-size: var(--text-h1);">
+          What I'm doing right now.
+        </h1>
+        <p class="mt-5 text-[18px]" style="color: var(--color-muted);">
+          A snapshot, not a résumé. Per the
+          <a
+            href="https://nownownow.com/about"
+            target="_blank"
+            rel="noreferrer noopener"
+            style="color: var(--color-accent-text); text-decoration: underline; text-underline-offset: 3px;"
+            >/now convention</a
+          >. Updated monthly.
+        </p>
+        <p
+          class="mono mt-6 text-[13px] uppercase tracking-wider"
+          style="color: var(--color-faint);"
+        >
+          Last updated · {fmt.format(lastUpdatedDate)}
+        </p>
+      </header>
+
+      <hr class="hairline my-12" />
+
+      <section class="now-section reveal">
+        <h2 class="now-h">Shipping</h2>
+        <ul>
+          {shipping.map((line) => <li>{line}</li>)}
+        </ul>
+      </section>
+
+      <section class="now-section reveal">
+        <h2 class="now-h">Reading</h2>
+        <ul>
+          {reading.map((line) => <li>{line}</li>)}
+        </ul>
+      </section>
+
+      <section class="now-section reveal">
+        <h2 class="now-h">Learning</h2>
+        <ul>
+          {learning.map((line) => <li>{line}</li>)}
+        </ul>
+      </section>
+
+      <section class="now-section reveal">
+        <h2 class="now-h">Looking for</h2>
+        <ul>
+          {looking.map((line) => <li>{line}</li>)}
+        </ul>
+      </section>
+
+      <section class="now-section reveal">
+        <h2 class="now-h">Not doing</h2>
+        <ul>
+          {notDoing.map((line) => <li>{line}</li>)}
+        </ul>
+      </section>
+
+      <GitHubStats user="Abhinav00711" />
+
+      <hr class="hairline my-12" />
+
+      <p class="text-[15px]" style="color: var(--color-muted);">
+        If something here matches a role you're hiring for —{" "}
+        <a
+          href="mailto:rathiabhinav01@gmail.com?subject=Senior%20role%20inquiry&body=Hi%20Abhinav%2C%0A%0A"
+          style="color: var(--color-accent-text); text-decoration: underline; text-underline-offset: 3px;"
+          >email me</a
+        >. I reply within 24h on weekdays.
+      </p>
+    </article>
+  </main>
+
+  <Footer />
+  <CommandPalette />
+  <RevealMotion />
+</Layout>
+
+<style>
+  .now-section + .now-section {
+    margin-top: 40px;
+  }
+  .now-h {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-faint);
+    margin-bottom: 12px;
+  }
+  .now-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .now-section li {
+    position: relative;
+    padding-left: 18px;
+    color: var(--color-body);
+    font-size: 17px;
+    line-height: 1.6;
+  }
+  .now-section li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.7em;
+    width: 6px;
+    height: 1px;
+    background: var(--color-accent);
+  }
+</style>

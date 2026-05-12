@@ -1,0 +1,54 @@
+---
+// 1px scroll-progress bar at the top, accent color.
+// Uses CSS scroll-driven animations where supported, with a JS fallback.
+---
+
+<div id="scroll-progress" aria-hidden="true"></div>
+
+<script>
+  const bar = document.getElementById("scroll-progress");
+  if (bar && !CSS.supports("animation-timeline: scroll()")) {
+    const update = () => {
+      const h = document.documentElement;
+      const scrolled =
+        h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight);
+      bar.style.transform = `scaleX(${scrolled})`;
+    };
+    document.addEventListener("scroll", update, { passive: true });
+    update();
+  }
+</script>
+
+<style>
+  #scroll-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--color-accent);
+    transform-origin: left;
+    transform: scaleX(0);
+    z-index: 50;
+    pointer-events: none;
+  }
+  @supports (animation-timeline: scroll()) {
+    #scroll-progress {
+      animation: scaleProgress linear;
+      animation-timeline: scroll(root);
+    }
+    @keyframes scaleProgress {
+      from {
+        transform: scaleX(0);
+      }
+      to {
+        transform: scaleX(1);
+      }
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #scroll-progress {
+      display: none;
+    }
+  }
+</style>

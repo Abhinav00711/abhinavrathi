@@ -1,0 +1,57 @@
+---
+interface Props {
+  id: string;
+  eyebrow?: string;
+  title: string;
+  intro?: string;
+  /** Optional supporting link rendered top-right ("All work", "RSS", etc.) */
+  aside?: { label: string; href: string };
+}
+const { id, eyebrow, title, intro, aside } = Astro.props;
+---
+
+<section id={id} class="section border-t" style="border-color: var(--color-hairline);">
+  <div class="container-prose">
+    <header class="reveal mb-12 flex flex-col gap-6 md:mb-16 md:flex-row md:items-end md:justify-between">
+      <div>
+        {eyebrow && <p class="eyebrow mb-3">{eyebrow}</p>}
+        <h2 class="headline" style="font-size: var(--text-h2);">{title}</h2>
+        {
+          intro && (
+            <p
+              class="mt-4 max-w-prose text-[16px]"
+              style="color: var(--color-muted);"
+            >
+              {intro}
+            </p>
+          )
+        }
+      </div>
+
+      {
+        aside && (
+          <a
+            href={aside.href}
+            class="section__aside font-mono text-sm transition-colors"
+          >
+            {aside.label} →
+          </a>
+        )
+      }
+    </header>
+
+    <slot />
+  </div>
+</section>
+
+<style>
+  /* Replaces the prior inline onmouseover/onmouseout pair — keeps hover
+     behavior intact under stricter CSP and saves a round of inline JS. */
+  .section__aside {
+    color: var(--color-muted);
+  }
+  .section__aside:hover,
+  .section__aside:focus-visible {
+    color: var(--color-accent-text);
+  }
+</style>

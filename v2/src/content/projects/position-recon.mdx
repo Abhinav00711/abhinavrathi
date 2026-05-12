@@ -1,0 +1,86 @@
+---
+title: "Real-time position reconciliation service"
+summary: "Cut nightly reconciliation 38m → 4m by making the job idempotent before making it fast."
+role: "Owner · backend"
+year: 2026
+tech: ["Python", "Flask", "MySQL", "Redis", "Docker"]
+cover: ../../assets/work/position-recon/cover.png
+anonymized: true
+metrics:
+  - { label: "nightly runtime", value: "38m → 4m" }
+  - { label: "duplicate fills (post-deploy)", value: "0" }
+  - { label: "p99 service latency", value: "< 50ms" }
+  - { label: "DB connection pool used", value: "−70%" }
+featured: true
+order: 3
+---
+
+import Diagram from "@components/Diagram.astro";
+
+> **Outcome.** Cut the nightly position-reconciliation runtime from ~38 min to
+> ~4 min by replacing N+1 ORM access with bulk MySQL writes — but the win that
+> mattered was making the job idempotent so it could be re-run safely under
+> retries, with zero duplicate fills since deploy.
+
+## Context
+
+End of every trading day, the firm's position state has to reconcile against
+external broker statements. The existing job ran ~38 min and would silently
+double-write on retry. Both are bad in different ways: minutes of lag at
+the wrong moment of the day, and duplicate fills mean corrupted state
+somebody hand-cleans the next morning before the desk can trade. The unit
+of work, when wrong, is dollars.
+
+## My role
+
+Owner. Schema design, service implementation, deploy, post-incident review.
+Reviewed by a senior engineer; shipped solo behind a feature flag.
+
+## Approach
+
+The first instinct was the obvious one — index harder. Helped ~20%, didn't
+fix it. The actual constraint was N+1: each row update was its own write,
+and a batch of millions of fills meant millions of round-trips.
+
+I tried two things that didn't work before the one that did. **First**, I
+bumped the DB pool size — fine in staging, broke in prod the moment two
+batches overlapped. **Second**, I tried vertical-partitioning the positions
+table; that swapped one lock-contention pattern for another. Neither shipped.
+
+What worked was two changes that landed together:
+
+1. **Bulk writes.** Batches of 5k rows via `executemany` inside a single
+   transaction. The first ~95% of the speed-up came from the round-trip
+   collapse, not from the engine.
+2. **Idempotency keys.** A composite of `(broker_id, fill_id, sequence)`
+   enforced at insert time via `INSERT ... ON DUPLICATE KEY UPDATE`. A retry
+   no longer doubles the position; it short-circuits.
+
+The second change matters more than the first. The visible win is the
+runtime; the load-bearing win is that the job is now *re-runnable*. Once a
+job is safe to re-run, you can be aggressive about cutting batch sizes
+without the fear that used to be the whole reason for the long runtime.
+
+## Architecture
+
+<Diagram
+  slug="position-recon"
+  alt="End-of-day broker statements flow into a Redis ingestion queue. A Flask reconciler service consumes them, batches 5,000 fills per transaction, writes to MySQL with INSERT ... ON DUPLICATE KEY UPDATE keyed on (broker_id, fill_id, sequence) so retries short-circuit. The service emits metrics that the ops dashboard subscribes to."
+  caption="The load-bearing piece is the composite idempotency key, not the bulk write — once retries are safe, batch sizes can come down without the runtime cost of being defensive."
+/>
+
+## Results
+
+- Nightly runtime **38 min → 4 min**.
+- Duplicate fills since deploy: **0** (rolling 90-day window).
+- Service-call **p99 < 50ms** under steady-state load.
+- DB connection-pool utilization **down ~70%**.
+- Next-morning hand-cleanup time eliminated: **~1 hr/day** (~65 hrs/quarter).
+
+## What I'd do differently
+
+I'd have written the idempotency contract in v0, before any optimization
+work. The 8× speed-up was the visible result, but the real value was that
+the job became safe — and I retrofitted that, which meant a deploy gap
+where I had a fast but unsafe job in staging. Next time, idempotent
+boundaries get designed in before the perf measurements.

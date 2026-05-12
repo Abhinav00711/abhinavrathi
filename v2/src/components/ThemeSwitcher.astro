@@ -1,0 +1,144 @@
+---
+/**
+ * Theme switcher — three-state segmented control: system · dark · light.
+ *
+ * Persists choice to localStorage under `theme`. "system" tracks
+ * matchMedia(prefers-color-scheme) and reacts to OS changes live.
+ * Cross-tab sync via the `storage` event so a recruiter with two tabs
+ * open doesn't see them disagree.
+ *
+ * Keyboard: `T` cycles system → dark → light → system (handled here so it
+ * works whether or not the Cmd-K palette has mounted).
+ */
+---
+
+<div
+  class="theme-switcher"
+  role="radiogroup"
+  aria-label="Color theme"
+  data-theme-switcher
+>
+  <button type="button" data-theme-set="system" aria-label="Use system theme" title="System">
+    <!-- monitor glyph -->
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+  </button>
+  <button type="button" data-theme-set="dark" aria-label="Use dark theme" title="Dark">
+    <!-- moon glyph -->
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.5 6.5 0 0 0 9.8 9.8z"/></svg>
+  </button>
+  <button type="button" data-theme-set="light" aria-label="Use light theme" title="Light">
+    <!-- sun glyph -->
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/></svg>
+  </button>
+</div>
+
+<script>
+  (() => {
+    type Choice = "system" | "dark" | "light";
+    const STORAGE = "theme";
+
+    const root = document.documentElement;
+    const switcher = document.querySelector<HTMLElement>("[data-theme-switcher]");
+    const buttons = switcher
+      ? Array.from(switcher.querySelectorAll<HTMLButtonElement>("[data-theme-set]"))
+      : [];
+
+    const mql = window.matchMedia("(prefers-color-scheme: light)");
+
+    const getChoice = (): Choice => {
+      const v = localStorage.getItem(STORAGE);
+      return v === "dark" || v === "light" ? v : "system";
+    };
+
+    const resolveEffective = (c: Choice): "dark" | "light" =>
+      c === "system" ? (mql.matches ? "light" : "dark") : c;
+
+    const apply = (c: Choice) => {
+      root.setAttribute("data-theme", resolveEffective(c));
+      buttons.forEach((b) => {
+        const isActive = b.dataset.themeSet === c;
+        b.setAttribute("aria-checked", isActive ? "true" : "false");
+        b.dataset.active = isActive ? "true" : "false";
+      });
+    };
+
+    const setChoice = (c: Choice) => {
+      if (c === "system") {
+        localStorage.removeItem(STORAGE);
+      } else {
+        localStorage.setItem(STORAGE, c);
+      }
+      apply(c);
+    };
+
+    // Initial reflect.
+    apply(getChoice());
+
+    // Click handlers.
+    buttons.forEach((b) =>
+      b.addEventListener("click", () => setChoice(b.dataset.themeSet as Choice))
+    );
+
+    // System change (only matters when choice === "system").
+    mql.addEventListener?.("change", () => {
+      if (getChoice() === "system") apply("system");
+    });
+
+    // Cross-tab sync.
+    window.addEventListener("storage", (e) => {
+      if (e.key === STORAGE) apply(getChoice());
+    });
+
+    // `T` cycles system → dark → light → system.
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "t" && e.key !== "T") return;
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      const editable = (document.activeElement as HTMLElement | null)?.isContentEditable;
+      if (tag === "INPUT" || tag === "TEXTAREA" || editable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      e.preventDefault();
+      const order: Choice[] = ["system", "dark", "light"];
+      const next = order[(order.indexOf(getChoice()) + 1) % order.length];
+      setChoice(next);
+    });
+
+    // Allow CommandPalette / other UI to trigger via custom event.
+    document.addEventListener("theme:cycle", () => {
+      const order: Choice[] = ["system", "dark", "light"];
+      const next = order[(order.indexOf(getChoice()) + 1) % order.length];
+      setChoice(next);
+    });
+  })();
+</script>
+
+<style>
+  .theme-switcher {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--color-hairline-strong);
+    background: var(--color-panel);
+    border-radius: var(--radius-pill);
+  }
+  .theme-switcher button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-muted);
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease;
+  }
+  .theme-switcher button:hover {
+    color: var(--color-body);
+  }
+  .theme-switcher button[data-active="true"] {
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+    color: var(--color-accent-text);
+  }
+</style>

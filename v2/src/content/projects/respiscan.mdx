@@ -1,0 +1,71 @@
+---
+title: "RespiScan 2.0"
+summary: "Wrapped a hackathon ML model in a real service — the engineering value is the loop around the model, not the model."
+role: "Lead · ML + service"
+year: 2024
+tech: ["Python", "TensorFlow", "Flask", "Intel oneAPI"]
+cover: ../../assets/work/respiscan/cover.png
+anonymized: false
+repo: "https://github.com/Abhinav00711/RespiScan-2.0"
+metrics:
+  - { label: "validation AUC", value: "0.92–0.94" }
+  - { label: "p95 inference latency", value: "50–100ms" }
+  - { label: "team", value: "2 engineers" }
+order: 1
+---
+
+import Diagram from "@components/Diagram.astro";
+
+> **Outcome.** Took the original RespiScan from "notebook that runs" to
+> "service a clinician can click through". Same model; the engineering
+> value is the loop around the model, not the model.
+
+## Context
+
+The original RespiScan was a notebook — train, eval, predict, all inside
+one Jupyter file. RespiScan 2.0 wraps the same model in a small Flask
+service with an explicit eval pipeline and a UI, because the gap between
+"notebook works" and "useful" is mostly tooling.
+
+## My role
+
+Lead, two-person team. I owned the inference service, the eval harness,
+and the frontend. My teammate owned the data prep and model tuning.
+
+## Approach
+
+The first version of the inference service was the obvious one: a single
+Flask route that calls `model.predict()` per request. Worked in benchmarks,
+fell apart under any load — Intel oneAPI's runtime had warm-up cost that
+made tail latency wildly variable. First request: hundreds of ms.
+Twentieth request: seconds, sometimes.
+
+What worked was **a warmed worker process** behind the Flask layer, with
+a health check that confirms the model is actually loaded and responsive
+before traffic gets routed to it. p95 collapsed from "occasionally seconds"
+to **tens of ms** and stayed there.
+
+The model itself is a CNN over preprocessed scan inputs. Less interesting
+than the service shape — most of the engineering value is in the eval
+harness (reproducible, scripted, runs on every change) and the warmed
+worker layer (keeps the inference predictable).
+
+## Architecture
+
+<Diagram
+  slug="respiscan"
+  alt="Web UI uploads a scan to Flask, which passes the image to a preprocessor (resize, normalize) and pushes a job to a warmed inference worker pool. The worker keeps the Intel oneAPI runtime resident — no cold-start per request — and writes the result to a short-TTL Redis cache. Flask reads from the cache and renders. An offline eval harness scores the model against a frozen dataset on every change."
+  caption="The warmed-worker layer is the load-bearing piece — it collapses tail latency from 'occasionally seconds' to tens of milliseconds. The eval harness keeps gains honest across model tweaks."
+/>
+
+## Results
+
+- Validation AUC: **0.92–0.94** (reproducible from the eval harness).
+- p95 inference latency after the warmed-worker change: **50–100ms**.
+- End-to-end (image upload → result on screen): **p95 < 1s**.
+
+## What I'd do differently
+
+I'd have written the eval harness *first*, before the model. It's the only
+honest way to know if a tweak helps. We had two false-positive "the model
+is better now" moments that turned out to be eval drift, not real gains.

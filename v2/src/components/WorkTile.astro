@@ -1,0 +1,114 @@
+---
+import { Image } from "astro:assets";
+import type { ImageMetadata } from "astro";
+
+interface Props {
+  href: string;
+  eyebrow: string; // e.g., "2026 · anonymized"
+  title: string;
+  summary: string; // one-line outcome
+  tech: string[];
+  /** Slug of the case study — used as a unique view-transition-name so
+   *  the title morphs from the tile to the case-study h1 in browsers
+   *  that support cross-document View Transitions. */
+  slug: string;
+  /** A short headline metric to show on the tile, e.g., "38m → 4m" */
+  metric?: string;
+  /** Cover image — processed by Astro Image into AVIF + WebP at build. */
+  cover?: ImageMetadata;
+}
+const { href, eyebrow, title, summary, tech, metric, slug, cover } = Astro.props;
+const transitionName = `case-${slug}`;
+---
+
+<a href={href} class="tile group reveal block">
+  <article class="flex h-full flex-col">
+    {
+      cover && (
+        <div class="tile__cover">
+          <Image
+            src={cover}
+            alt={`${title} — cover`}
+            widths={[400, 640, 800]}
+            sizes="(min-width: 1024px) 360px, (min-width: 768px) 50vw, 100vw"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
+      )
+    }
+
+    <header class="flex items-start justify-between gap-4">
+      <p class="mono text-[11px] uppercase tracking-wider" style="color: var(--color-faint);">
+        {eyebrow}
+      </p>
+      {
+        metric && (
+          <p
+            class="mono rounded-full border px-2 py-0.5 text-[11px]"
+            style="border-color: var(--color-hairline-strong); color: var(--color-accent-text);"
+          >
+            {metric}
+          </p>
+        )
+      }
+    </header>
+
+    <h3
+      class="mt-5 text-white"
+      style={`font-size: var(--text-h3); font-weight: 600; line-height: 1.2; view-transition-name: ${transitionName};`}
+    >
+      {title}
+    </h3>
+
+    <p class="mt-3 text-[15px]" style="color: var(--color-muted);">{summary}</p>
+
+    <ul class="mt-6 flex flex-wrap gap-1.5">
+      {tech.slice(0, 4).map((t) => <li class="chip">{t}</li>)}
+    </ul>
+
+    <div
+      class="mt-auto pt-6 font-mono text-[13px] transition-colors"
+      style="color: var(--color-muted);"
+    >
+      <span class="arrow">Read case study →</span>
+    </div>
+  </article>
+</a>
+
+<style>
+  .tile {
+    position: relative;
+    padding: 24px;
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-md);
+    background: var(--color-panel);
+    transition: border-color 200ms ease, transform 200ms ease;
+    overflow: hidden;
+  }
+  /* Cover sits flush at the top — bleed to the tile edges so it reads as
+     part of the card, not a contained thumbnail. */
+  .tile__cover {
+    margin: -24px -24px 20px;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  .tile__cover :global(img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 320ms ease;
+  }
+  .tile:hover .tile__cover :global(img) {
+    transform: scale(1.02);
+  }
+  .tile:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-2px);
+  }
+  .tile:hover .arrow {
+    color: var(--color-accent-text);
+  }
+</style>

@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" role="img" aria-label="DataChatAI architecture: user query routes through a schema-introspection retriever, then a SQL generator backed by Gemini, then an audit preview the user approves before the SQL executor hits the data warehouse and the result is rendered.">
+  <title>DataChatAI — architecture</title>
+  <desc>A user asks a natural-language question through the Streamlit UI. A schema introspection layer turns the warehouse catalog into retrieval documents (one per table, one per column, one per join). The retriever finds the grounded subset. Gemini generates SQL constrained to that subset. The user sees the SQL in an audit panel before it runs. On approval the SQL executor hits the warehouse and the result is rendered. Each boundary is replaceable.</desc>
+
+  <defs>
+    <style>
+      .surface { fill: #0a0a0a; }
+      .panel   { fill: #141416; }
+      .stroke  { stroke: #2a2a2d; stroke-width: 1; }
+      .strokeFaint { stroke: #1f1f22; stroke-width: 1; }
+      .accent  { stroke: #3d52fe; stroke-width: 1.5; fill: none; }
+      .accentDashed { stroke: #3d52fe; stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+      .accentFill { fill: #3d52fe; }
+      .label   { fill: #e6e6e8; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13px; }
+      .sub     { fill: #9a9aa2; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.04em; }
+      .eyebrow { fill: #6c6c74; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+      .head    { fill: #ffffff; font-family: 'Inter', system-ui, sans-serif; font-size: 14px; font-weight: 600; }
+    </style>
+    <marker id="arrowR-dc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d52fe"/>
+    </marker>
+    <marker id="arrowD-dc" viewBox="0 0 10 10" refX="5" refY="9" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d52fe"/>
+    </marker>
+  </defs>
+
+  <rect class="surface" width="1200" height="520"/>
+
+  <text x="32" y="38" class="eyebrow">DATACHATAI · ARCHITECTURE</text>
+  <text x="32" y="62" class="head">Ground the model in the actual schema. Audit the SQL before it runs.</text>
+
+  <!-- User / UI -->
+  <g transform="translate(32,120)">
+    <rect class="panel stroke" width="180" height="100" rx="10"/>
+    <text x="16" y="28" class="sub">STREAMLIT</text>
+    <text x="16" y="52" class="head">Chat UI</text>
+    <text x="16" y="72" class="label">natural-language Q</text>
+    <text x="16" y="88" class="label" style="fill:#9a9aa2">audit · approve · run</text>
+  </g>
+
+  <line class="accent" x1="212" y1="170" x2="280" y2="170" marker-end="url(#arrowR-dc)"/>
+
+  <!-- Schema retriever -->
+  <g transform="translate(280,90)">
+    <rect class="panel stroke" width="240" height="160" rx="10"/>
+    <text x="16" y="28" class="sub">LLAMA INDEX</text>
+    <text x="16" y="52" class="head">Schema retriever</text>
+    <text x="16" y="76" class="label">one doc per table</text>
+    <text x="16" y="94" class="label">one doc per column</text>
+    <text x="16" y="112" class="label">one doc per join</text>
+    <text x="16" y="138" class="sub" style="fill:#3d52fe">GROUNDED SUBSET</text>
+  </g>
+
+  <line class="accent" x1="520" y1="170" x2="588" y2="170" marker-end="url(#arrowR-dc)"/>
+
+  <!-- Schema source -->
+  <g transform="translate(280,310)">
+    <rect class="panel strokeFaint" width="240" height="90" rx="10"/>
+    <text x="16" y="28" class="sub">INTROSPECTION</text>
+    <text x="16" y="52" class="head">SQLAlchemy catalog</text>
+    <text x="16" y="74" class="label">auto-discovered · no per-table config</text>
+  </g>
+  <line class="accentDashed" x1="400" y1="310" x2="400" y2="250" marker-end="url(#arrowD-dc)" transform="rotate(180 400 280)"/>
+
+  <!-- SQL generator -->
+  <g transform="translate(588,90)">
+    <rect class="panel stroke" width="240" height="160" rx="10"/>
+    <text x="16" y="28" class="sub">GEMINI</text>
+    <text x="16" y="52" class="head">SQL generator</text>
+    <text x="16" y="76" class="label">prompt = subset + question</text>
+    <text x="16" y="94" class="label">output = candidate SQL</text>
+    <text x="16" y="120" class="sub" style="fill:#3d52fe">GENERATOR-AGNOSTIC</text>
+    <text x="16" y="138" class="label">swapped twice, no other change</text>
+  </g>
+
+  <line class="accent" x1="828" y1="170" x2="896" y2="170" marker-end="url(#arrowR-dc)"/>
+
+  <!-- Audit panel -->
+  <g transform="translate(896,120)">
+    <rect class="panel stroke" width="240" height="100" rx="10"/>
+    <text x="16" y="28" class="sub">USER · GATE</text>
+    <text x="16" y="52" class="head">Audit + preview</text>
+    <text x="16" y="72" class="label">SQL shown before run</text>
+    <text x="16" y="88" class="label" style="fill:#9a9aa2">approve · cancel · edit</text>
+  </g>
+
+  <line class="accent" x1="1016" y1="220" x2="1016" y2="320" marker-end="url(#arrowD-dc)"/>
+
+  <!-- Executor -->
+  <g transform="translate(896,340)">
+    <rect class="panel stroke" width="240" height="90" rx="10"/>
+    <text x="16" y="28" class="sub">SQLALCHEMY</text>
+    <text x="16" y="52" class="head">SQL executor</text>
+    <text x="16" y="74" class="label">parameterized · timeboxed</text>
+  </g>
+
+  <!-- Result back to UI (dashed) -->
+  <line class="accentDashed" x1="896" y1="385" x2="122" y2="385"/>
+  <line class="accentDashed" x1="122" y1="385" x2="122" y2="225" marker-end="url(#arrowD-dc)"/>
+
+  <!-- footer note -->
+  <g transform="translate(32,460)">
+    <rect class="panel strokeFaint" width="1136" height="40" rx="8"/>
+    <circle cx="20" cy="20" r="3" class="accentFill"/>
+    <text x="36" y="25" class="label" style="fill:#9a9aa2">schema retrieval is the load-bearing step · 0 hallucinated columns over 200-question eval · cold-cache &lt; 2s</text>
+  </g>
+</svg>

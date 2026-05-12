@@ -1,0 +1,85 @@
+---
+title: "Order & trade ingestion pipeline"
+summary: "One pipeline for N broker feeds. Pluggable adapters, single canonical schema, recovery-first design."
+role: "Owner · backend"
+year: 2025
+tech: ["Python", "Flask", "MySQL", "Redis", "Docker"]
+cover: ../../assets/work/order-ingestion/cover.png
+anonymized: true
+metrics:
+  - { label: "brokers integrated", value: "4–5" }
+  - { label: "time to add a new broker", value: "weeks → days" }
+  - { label: "lost confirmations during broker outages", value: "0" }
+  - { label: "lines of glue code retired", value: "~3,000+" }
+featured: true
+order: 5
+---
+
+import Diagram from "@components/Diagram.astro";
+
+> **Outcome.** Replaced an N×M tangle of per-broker integration scripts with
+> one Flask + MySQL ingestion service that ingests confirmations from every
+> broker, normalizes to a single canonical schema, and survives partial
+> outages without losing fills.
+
+## Context
+
+Trade confirmations arrive from multiple brokers in different shapes —
+mostly FIX, occasionally CSV drops, occasionally a webhook with its own
+quirks. Downstream services don't care about that variety; they want one
+canonical schema. The previous integration was a hand-stitched pile of
+broker-specific scripts, and every new broker meant two weeks of glue code
+plus a new thing for ops to monitor.
+
+## My role
+
+Owner. Designed the abstraction, shipped the pipeline, migrated the
+existing brokers off the old scripts over four sprints.
+
+## Approach
+
+The first design was "one ingester service per broker" — clean code,
+linear scaling, but operationally awful: N services to monitor, N deploy
+pipelines, N sets of credentials. I shipped one prototype that way, then
+threw it out.
+
+The second design was the one that stuck: **one** ingestion service,
+**plug-in adapters** per broker, a **single** canonical normalization step
+in the middle, **single** persistence layer at the end. Each adapter is a
+small interface (`fetch_batch`, `parse`, `high_water_mark`) in its own
+module; testing per-broker became actually possible because the boundary
+was real, not implied.
+
+The hard part wasn't the normalization. It was idempotency under partial
+outages. A broker disconnects mid-batch, you reconnect, do you replay from
+your high-water mark or from theirs? **Different brokers answer this
+differently.** What worked was per-broker high-water-mark tables and a
+recovery routine that's specific per adapter — explicit code is better than
+clever code when the cost of being wrong is a missed fill.
+
+Most of the bugs in the first three months were recovery edge cases, not
+happy-path bugs. The lesson was load-bearing for the next project.
+
+## Architecture
+
+<Diagram
+  slug="order-ingestion"
+  width={1200}
+  height={540}
+  alt="N broker adapters (FIX, CSV, webhook) feed a single Python normalization layer that produces a canonical schema. An idempotency check (broker, ext_id) guards the MySQL write to the trade ledger. On outage, per-broker high-water-mark tables drive adapter-specific replay. Downstream services subscribe to a Redis Streams notification queue."
+  caption="The boundary that earns its keep is the adapter interface — explicit per-broker recovery code beats a clever shared replay loop the moment a real outage hits."
+/>
+
+## Results
+
+- Brokers integrated: **4–5**, all on a single service.
+- Time to onboard a new broker: **weeks → days**.
+- Confirmations dropped during broker outages over the year: **0**.
+- Old per-broker glue scripts retired: **~3,000+ lines**.
+- p99 confirmation-to-DB latency: **< 100ms**.
+
+## What I'd do differently
+
+I'd start with the recovery routine, not the happy path. Shipping the
+"normal case" first felt productive but the bugs that mattered were all in
+the recovery code, and those landed weeks later under real outages.

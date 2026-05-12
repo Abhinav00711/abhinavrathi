@@ -1,0 +1,294 @@
+---
+/**
+ * Live GitHub stats widget for the /now page.
+ *
+ * Client-side fetch from the unauthenticated GitHub API (60 req/h/IP).
+ * Renders three sections:
+ *   1. Recent push events (last 5)
+ *   2. Recently starred repos (last 3)
+ *
+ * Cache strategy: localStorage with a 1h TTL keyed by username + endpoint
+ * — bounces around the rate limit even if the recruiter reloads /now.
+ *
+ * Failure mode: if either fetch fails (offline, rate-limited, 404), that
+ * section silently hides itself. The /now page already has its own content
+ * so the widget is purely additive.
+ *
+ * Why not server-rendered: keeps the dist a static SSG with no build-time
+ * GitHub dep — and keeps the data live without re-deploying.
+ */
+interface Props {
+  /** GitHub username — defaults to Abhinav's. */
+  user?: string;
+}
+const { user = "Abhinav00711" } = Astro.props;
+---
+
+<section
+  class="gh-widget reveal"
+  data-gh-user={user}
+  aria-label="Recent GitHub activity"
+>
+  <h2 class="now-h">Recent on GitHub</h2>
+
+  <div class="gh-widget__inner" data-gh-inner hidden>
+    <div data-gh-pushes class="gh-block" hidden>
+      <h3 class="gh-block__title">Recent commits</h3>
+      <ul class="gh-list" data-gh-pushes-list></ul>
+    </div>
+    <div data-gh-stars class="gh-block" hidden>
+      <h3 class="gh-block__title">Recently starred</h3>
+      <ul class="gh-list" data-gh-stars-list></ul>
+    </div>
+    <p class="gh-attr mono" data-gh-attr></p>
+  </div>
+
+  <div class="gh-skeleton" data-gh-skeleton aria-hidden="true">
+    <div class="gh-skel-row"></div>
+    <div class="gh-skel-row"></div>
+    <div class="gh-skel-row"></div>
+  </div>
+</section>
+
+<script>
+  (() => {
+    const root = document.querySelector<HTMLElement>(".gh-widget");
+    if (!root) return;
+    const user = root.dataset.ghUser || "Abhinav00711";
+
+    const inner = root.querySelector<HTMLElement>("[data-gh-inner]");
+    const skeleton = root.querySelector<HTMLElement>("[data-gh-skeleton]");
+    const pushBlock = root.querySelector<HTMLElement>("[data-gh-pushes]");
+    const pushList = root.querySelector<HTMLElement>("[data-gh-pushes-list]");
+    const starBlock = root.querySelector<HTMLElement>("[data-gh-stars]");
+    const starList = root.querySelector<HTMLElement>("[data-gh-stars-list]");
+    const attr = root.querySelector<HTMLElement>("[data-gh-attr]");
+
+    const TTL_MS = 60 * 60 * 1000; // 1h
+
+    type Cached<T> = { at: number; data: T };
+    const readCache = <T,>(key: string): T | null => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Cached<T>;
+        if (Date.now() - parsed.at > TTL_MS) return null;
+        return parsed.data;
+      } catch {
+        return null;
+      }
+    };
+    const writeCache = <T,>(key: string, data: T) => {
+      try {
+        localStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
+      } catch {
+        /* quota — ignore */
+      }
+    };
+
+    const fetchOrCache = async <T,>(url: string, key: string): Promise<T | null> => {
+      const cached = readCache<T>(key);
+      if (cached) return cached;
+      try {
+        const res = await fetch(url, {
+          headers: { Accept: "application/vnd.github+json" },
+        });
+        if (!res.ok) return null;
+        const data = (await res.json()) as T;
+        writeCache(key, data);
+        return data;
+      } catch {
+        return null;
+      }
+    };
+
+    const escape = (s: string) =>
+      s.replace(
+        /[&<>"']/g,
+        (c) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+            c
+          ] as string,
+      );
+
+    const fmtDate = (iso: string) => {
+      const d = new Date(iso);
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+      }).format(d);
+    };
+
+    const truncate = (s: string, n: number) =>
+      s.length > n ? s.slice(0, n - 1) + "…" : s;
+
+    interface PushEvent {
+      type: string;
+      created_at: string;
+      repo: { name: string };
+      payload?: { commits?: Array<{ message: string; sha: string }>; ref?: string };
+    }
+    interface StarRepo {
+      full_name: string;
+      html_url: string;
+      description: string | null;
+      stargazers_count: number;
+    }
+
+    const renderPushes = async () => {
+      const events = await fetchOrCache<PushEvent[]>(
+        `https://api.github.com/users/${encodeURIComponent(user)}/events/public?per_page=30`,
+        `gh:${user}:events`,
+      );
+      if (!events || events.length === 0 || !pushList || !pushBlock) return;
+      const pushes = events.filter((e) => e.type === "PushEvent").slice(0, 5);
+      if (pushes.length === 0) return;
+      pushList.innerHTML = pushes
+        .map((p) => {
+          const commits = p.payload?.commits ?? [];
+          const first = commits[0]?.message?.split("\n")[0] ?? "(commit)";
+          const more =
+            commits.length > 1 ? ` <span class="gh-mute">+${commits.length - 1}</span>` : "";
+          return `<li class="gh-item">
+            <span class="gh-date mono">${fmtDate(p.created_at)}</span>
+            <span class="gh-msg"><a href="https://github.com/${escape(p.repo.name)}" target="_blank" rel="noreferrer noopener">${escape(p.repo.name)}</a> · ${escape(truncate(first, 70))}${more}</span>
+          </li>`;
+        })
+        .join("");
+      pushBlock.hidden = false;
+    };
+
+    const renderStars = async () => {
+      const stars = await fetchOrCache<StarRepo[]>(
+        `https://api.github.com/users/${encodeURIComponent(user)}/starred?per_page=3`,
+        `gh:${user}:stars`,
+      );
+      if (!stars || stars.length === 0 || !starList || !starBlock) return;
+      starList.innerHTML = stars
+        .slice(0, 3)
+        .map(
+          (r) => `<li class="gh-item">
+            <a href="${escape(r.html_url)}" target="_blank" rel="noreferrer noopener">${escape(r.full_name)}</a>
+            ${r.description ? `<span class="gh-mute"> · ${escape(truncate(r.description, 80))}</span>` : ""}
+          </li>`,
+        )
+        .join("");
+      starBlock.hidden = false;
+    };
+
+    Promise.all([renderPushes(), renderStars()]).then(() => {
+      if (skeleton) skeleton.hidden = true;
+      if (inner && (!pushBlock?.hidden || !starBlock?.hidden)) {
+        inner.hidden = false;
+        if (attr) attr.textContent = `cached 1h · github.com/${user}`;
+      } else {
+        // No data and no cache — hide the whole widget; /now stays clean.
+        root.hidden = true;
+      }
+    });
+  })();
+</script>
+
+<style>
+  .gh-widget {
+    margin-top: 40px;
+  }
+  .gh-widget__inner {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .gh-block + .gh-block {
+    margin-top: 0;
+  }
+  .gh-block__title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-faint);
+    margin-bottom: 8px;
+    font-weight: 400;
+  }
+  .gh-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .gh-item {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    color: var(--color-body);
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  .gh-item a {
+    color: var(--color-accent-text);
+    text-decoration: none;
+  }
+  .gh-item a:hover,
+  .gh-item a:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .gh-date {
+    flex-shrink: 0;
+    width: 52px;
+    color: var(--color-faint);
+    font-size: 12px;
+  }
+  .gh-msg {
+    color: var(--color-body);
+  }
+  .gh-mute {
+    color: var(--color-faint);
+  }
+  .gh-attr {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--color-faint);
+    text-transform: lowercase;
+    letter-spacing: 0.04em;
+  }
+  /* skeleton — three pulsing bars while we wait on the fetch */
+  .gh-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .gh-skel-row {
+    height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(
+      90deg,
+      var(--color-panel) 0%,
+      var(--color-hairline) 50%,
+      var(--color-panel) 100%
+    );
+    background-size: 200% 100%;
+    animation: gh-shimmer 1.4s linear infinite;
+  }
+  .gh-skel-row:nth-child(2) {
+    width: 80%;
+  }
+  .gh-skel-row:nth-child(3) {
+    width: 60%;
+  }
+  @keyframes gh-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .gh-skel-row {
+      animation: none;
+    }
+  }
+</style>

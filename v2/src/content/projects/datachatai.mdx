@@ -1,0 +1,78 @@
+---
+title: "DataChatAI"
+summary: "Schema-aware RAG over structured data — the model writes SQL you can audit before it runs."
+role: "Solo · full-stack"
+year: 2025
+tech: ["Python", "Llama Index", "Gemini", "Streamlit", "SQLAlchemy"]
+cover: ../../assets/work/datachatai/cover.png
+anonymized: false
+repo: "https://github.com/Abhinav00711/DataChatAI"
+metrics:
+  - { label: "cold-cache answer latency", value: "< 2s" }
+  - { label: "schema coverage", value: "auto-introspection" }
+  - { label: "hallucinated columns (200-q eval)", value: "0" }
+order: 2
+---
+
+import Diagram from "@components/Diagram.astro";
+
+> **Outcome.** A Python service that answers natural-language questions
+> over a structured dataset by retrieving from a schema-introspection
+> layer first, then grounding generation in actual SQL the user can audit
+> before it runs.
+
+## Context
+
+I wanted a chat interface over a data warehouse without the failure mode
+where the model invents column names. Every "let's slap an LLM on the DB"
+demo I'd seen handled the toy schema and broke on a real one. The
+interesting engineering wasn't *"use Llama Index"* — it was the schema
+introspection step that gives the retriever something true to anchor on
+before the generator gets to make anything up.
+
+## My role
+
+Solo. Schema layer, retrieval, generation, Streamlit frontend, eval
+harness.
+
+## Approach
+
+Off-the-shelf RAG with Llama Index gets you 60% of the way. The remaining
+40% is preventing the model from inventing columns and joins.
+
+What I tried first was a single fat prompt with the entire schema dumped
+in. Worked for small databases, fell apart with anything realistic — both
+on context-window grounds and on the model's tendency to confabulate
+relationships between tables it had only just seen.
+
+What worked was a **schema introspection step** that turns the table
+catalog into proper retrieval documents — one per table, one per column,
+one per join relationship. When the user asks *"average X by quarter"*,
+the retriever finds the right tables and columns *first*, the SQL
+generator works from a grounded subset, and the user sees the SQL before
+it executes.
+
+The tradeoff was latency vs trust. Adding the schema retrieval costs ~500ms
+up front. I kept it because the alternative (faster but more hallucinations)
+was strictly worse for any non-toy use.
+
+## Architecture
+
+<Diagram
+  slug="datachatai"
+  alt="A user enters a natural-language question in the Streamlit chat UI. A schema introspection layer turns the warehouse catalog into retrieval documents (one per table, one per column, one per join). Llama Index retrieves the grounded subset. Gemini generates SQL constrained to that subset. The user sees the SQL in an audit panel before it runs. On approval, the SQL executor (SQLAlchemy) hits the warehouse and the result renders back in the UI."
+  caption="The schema-introspection step is the load-bearing piece — it's what prevents the generator from inventing columns. Each boundary is replaceable; the generator has been swapped twice with no other change."
+/>
+
+## Results
+
+- Cold-cache answer latency: **< 2s**.
+- Schema coverage: **full auto-introspection**, no per-table config.
+- Hallucinated column references in the audit set: **0** over a 200-question
+  eval against a real warehouse schema.
+
+## What I'd do differently
+
+The eval is 200 questions; it should have been 1000, and it should have
+been generated from real query logs instead of hand-written. I was
+rate-limited by my own attention more than my code.

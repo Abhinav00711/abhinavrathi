@@ -1,0 +1,143 @@
+---
+/**
+ * Sticky right-edge mini-nav — Linear-docs style.
+ * Vertical column of dots aligned to each homepage section. The dot
+ * for the in-view section fills with the accent color.
+ *
+ * Hidden on small screens (recruiters skim mobile linearly anyway).
+ * Hidden when prefers-reduced-motion is set (avoids the IntersectionObserver
+ * jitter being a distraction).
+ */
+
+interface Props {
+  sections: Array<{ id: string; label: string }>;
+}
+const { sections } = Astro.props;
+---
+
+<nav class="section-dots" aria-label="Section navigation">
+  <ul>
+    {
+      sections.map((s) => (
+        <li>
+          <a href={`#${s.id}`} data-section-target={s.id} aria-label={s.label}>
+            <span class="dot" />
+            <span class="label">{s.label}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</nav>
+
+<script>
+  (() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return;
+
+    const links = Array.from(
+      document.querySelectorAll<HTMLAnchorElement>("[data-section-target]")
+    );
+    if (!links.length) return;
+
+    const sections = links
+      .map((l) => document.getElementById(l.dataset.sectionTarget!))
+      .filter((el): el is HTMLElement => el !== null);
+
+    const setActive = (id: string) => {
+      links.forEach((l) => {
+        const isMatch = l.dataset.sectionTarget === id;
+        l.dataset.active = isMatch ? "true" : "false";
+        if (isMatch) l.setAttribute("aria-current", "true");
+        else l.removeAttribute("aria-current");
+      });
+    };
+
+    // Use IntersectionObserver to find the section whose "active line"
+    // (24% from top) is currently in view.
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible?.target?.id) setActive(visible.target.id);
+      },
+      { rootMargin: "-24% 0px -65% 0px", threshold: [0, 0.1, 0.5, 1] }
+    );
+    sections.forEach((s) => obs.observe(s));
+  })();
+</script>
+
+<style>
+  .section-dots {
+    position: fixed;
+    right: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 30;
+    display: none;
+  }
+  @media (min-width: 1100px) {
+    .section-dots {
+      display: block;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .section-dots {
+      display: none;
+    }
+  }
+  .section-dots ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .section-dots a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-muted);
+    text-decoration: none;
+    transition: color 160ms ease;
+  }
+  .section-dots .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-hairline-strong);
+    transition: background 160ms ease, transform 160ms ease;
+  }
+  .section-dots .label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0;
+    transform: translateX(4px);
+    transition: opacity 160ms ease, transform 160ms ease;
+  }
+  .section-dots a:hover .dot,
+  .section-dots a[data-active="true"] .dot {
+    background: var(--color-accent);
+    transform: scale(1.2);
+  }
+  .section-dots a:hover,
+  .section-dots a[data-active="true"] {
+    color: var(--color-accent-text);
+  }
+  .section-dots a:hover .label,
+  .section-dots a[data-active="true"] .label {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .section-dots a:focus-visible {
+    outline: none;
+  }
+  .section-dots a:focus-visible .dot {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+  }
+</style>

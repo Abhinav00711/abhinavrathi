@@ -1,0 +1,52 @@
+---
+/**
+ * Architecture diagram embed for case-study MDX.
+ *
+ * Use:
+ *   <Diagram slug="position-recon" file="architecture.svg" alt="..."
+ *            caption="..." />
+ *
+ * Why this exists: the diagram SVGs live under `public/work/<slug>/` so they
+ * can be referenced as static assets. Their URLs depend on Astro's
+ * `BASE_URL` (`/abhinavrathi/...` today, `/...` once the custom domain
+ * lands), and MDX doesn't get a clean way to template that without a
+ * component. Centralizing here makes the abhinavrathi.com switchover a
+ * config-only change.
+ */
+interface Props {
+  slug: string;
+  file?: string; // defaults to architecture.svg
+  alt: string;
+  caption?: string;
+  /**
+   * Intrinsic dimensions of the SVG (its viewBox). Passed through as the
+   * <img> `width` and `height` attributes so the browser reserves the
+   * correct layout slot before the asset loads — keeps CLS at 0 for the
+   * case-study reading view.
+   */
+  width?: number;
+  height?: number;
+}
+const {
+  slug,
+  file = "architecture.svg",
+  alt,
+  caption,
+  width = 1200,
+  height = 520,
+} = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const src = `${base}/work/${slug}/${file}`;
+---
+
+<figure class="arch">
+  <img
+    src={src}
+    alt={alt}
+    width={width}
+    height={height}
+    loading="lazy"
+    decoding="async"
+  />
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>

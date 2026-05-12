@@ -1,0 +1,186 @@
+---
+title: "The idempotency contract: design it before you optimize"
+summary: "A 10× speed-up on a job without an idempotency key is just an opportunity to corrupt state 10× faster. A short field guide to writing the contract first."
+published: 2026-06-15
+draft: true
+tags: ["idempotency", "backend", "prop-trading", "production"]
+---
+
+The mistake I want to talk you out of is the one I made first: optimize
+the slow thing, then notice it isn't safe to retry, then bolt safety on
+afterward. It works, kind of. It's the wrong order. The order that
+actually scales — across teams, across years, across "did anyone
+remember to write this down" — is the inverse. Write the idempotency
+contract. Then optimize against it.
+
+This post is a short field guide to writing that contract.
+
+## What "idempotent" actually means here
+
+"Idempotent" is the kind of word that lets a team agree on something
+while meaning three different things. In production code I find it
+useful to be specific about which kind you're committing to.
+
+**Per-operation idempotency.** A single retried call has the same effect
+as one call. This is the level interview questions test. It's necessary,
+not sufficient — you need it before you can build anything else.
+
+**Per-batch idempotency.** A retried batch produces the same final
+state as a single batch, *and* doesn't double-count the rows that
+succeeded the first time. This is the one production usually skips. A
+batch is "almost done", a worker dies, the next worker re-runs the whole
+batch, and the rows from the first run get re-applied. It looks like a
+correctness bug; it's actually a contract gap.
+
+**Per-workflow idempotency.** A retried multi-step workflow lands in the
+same final state regardless of which step failed. This is the highest
+bar and the one that distinguishes "the service is idempotent" from
+"the *workflow that uses* the service is idempotent". Most production
+retries that hurt are category-3 problems written like they're
+category-1 problems.
+
+Before you write code that retries, pick which level you're committing
+to and say it out loud.
+
+## The contract — three questions to answer first
+
+The contract has three lines. If you can't answer all three, you don't
+have an idempotency contract; you have an idempotency aspiration.
+
+**What is the unit of work?** Not "the request". The *business* unit.
+A fill? A position change? A trade-day's worth of confirmations? The
+unit decides everything else — the dedup key, the retention window,
+the recovery story. I've seen smart teams disagree about it for weeks
+after they'd already deployed the "fix"; if the unit isn't on the wall
+in one sentence, the perf work is going to land on top of a fuzzy
+foundation.
+
+**What is the dedup key?** A hash? A monotonic id? A composite? Whose
+namespace? At Axxela the pattern I keep reaching for is a composite
+of *(source-system-id, source-record-id, sequence-number)* — three
+things, all coming from upstream, all stable across retries. Hashes
+are tempting but introduce a "what if two real records collide"
+question I'd rather not own; explicit composite keys remove that
+question entirely.
+
+**What's the retention window for the dedup key?** "Forever" is wrong
+— the dedup table grows without bound and eventually becomes its own
+performance problem. "One trade-day" is usually right for fills.
+"Forever within a sliding 90-day window" is right when audits need
+history. Pick a window, document it, and put a job in to enforce it.
+Skipping this question is how you end up with a 50GB dedup table
+nobody wants to touch.
+
+## Three patterns I keep reaching for
+
+### 1. Idempotency-key column on the table
+
+For batch ingestion into a single table. Add a unique constraint on
+`(source, source_id)` and insert with `INSERT ... ON DUPLICATE KEY
+UPDATE` (MySQL) or `INSERT ... ON CONFLICT` (Postgres). Retries
+short-circuit at the storage layer; you don't need to read-then-write,
+you just write. Cheap, durable, survives crashes.
+
+When it bites: long-tail keys with high cardinality bloat the index.
+If your dedup key is a UUID per row and the table is in the tens of
+millions, the index is suddenly load-bearing for write throughput.
+Profile it before you scale it.
+
+### 2. Outbox + consumer with high-water mark
+
+For multi-system workflows. Write the outbox row in the same
+transaction as the state change; a consumer reads forward of a
+high-water mark and re-applies idempotently downstream. The
+high-water mark is the consumer's idea of "I have processed
+everything up to id N", persisted alongside the state it advances.
+
+This is the pattern I reach for at Axxela for broker-confirmation
+ingestion. When a broker has a partial outage and replays the same
+confirmations on reconnect, the consumer doesn't double-apply
+because the high-water mark already moved past them. The cost is one
+extra table and a small amount of discipline about advancing the
+mark only after the downstream effect is durable. The benefit is
+that the recovery story stops being "ssh in and run this script
+carefully"; it becomes "the consumer just reads forward, like it
+always does".
+
+### 3. Token-bucket dedup on the edge
+
+For request handlers where you can't push the dedup into the
+schema. A short-TTL cache (Redis `SETNX`, or a database row with a
+unique constraint on `idempotency_key`) keyed by an incoming
+`Idempotency-Key` header. The classic Stripe pattern. Useful when
+the handler has side-effects in multiple downstream systems and you
+need a single place to say "I've seen this request before".
+
+The trap: token-bucket dedup is only as good as the TTL. If the TTL
+is shorter than the maximum retry window of any client, you have a
+gap. Make the TTL longer than the slowest legitimate retry. At a
+trading firm I'd rather over-retain by an hour than under-retain by
+a minute.
+
+## The cost of skipping the contract
+
+The first big perf win I shipped at Axxela was a position-recon job
+that dropped from ~38 minutes to ~4 minutes. The speed-up came from
+bulk writes — `executemany()` against batches of five thousand rows
+per transaction, replacing what had been a per-row update loop. The
+benchmarks were beautiful. Staging was clean. I shipped on a Friday.
+
+The retry behavior was not clean.
+
+The job had a transient failure mid-run on a Monday morning. The
+retry kicked in, started over from the top of the batch, and
+re-applied the rows that had succeeded on the first run. Positions
+doubled for a window of about twenty minutes. Recovery was hand-
+driven and slow because the recovery hadn't been designed — only the
+speed-up had. The post-mortem became a single sentence: *we
+optimized the speed-up; we didn't design the recovery*.
+
+The fix was a composite idempotency key —
+`(broker_id, fill_id, sequence)` — enforced as a unique constraint
+at insert time, with `ON DUPLICATE KEY UPDATE` turning each retry
+into a no-op instead of a double-apply. With that key in place the
+job became trivially re-runnable. The runtime didn't change. The
+human-cost of an incident went from "an hour of hand-cleaning state
+under time pressure" to "kick the job, walk away".
+
+The visible cost of skipping the contract was twenty minutes of bad
+positions. The real cost was the post-mortem, the trust, and the
+half-day it took two of us to write the cleanup script that
+shouldn't have needed to exist.
+
+## A short checklist before merging perf work
+
+A real checklist, not a checklist-shaped vibe. If any answer is
+"we'll figure it out", the perf work isn't ready:
+
+- [ ] What is the unit of work, in one sentence?
+- [ ] What is the dedup key, and whose namespace does it come from?
+- [ ] What is the retention window for the dedup key, and what job
+      enforces it?
+- [ ] Where is the contract documented, and who else has read it?
+- [ ] What does the recovery script look like — can it be run twice
+      safely?
+
+The discipline isn't to answer all five perfectly. The discipline is
+to refuse to merge the perf change until the answers exist
+somewhere.
+
+## Closing
+
+Idempotency feels like the boring, defensive layer underneath the
+real engineering work. It isn't. At a trading firm the idempotency
+contract is the engineering work — the *load-bearing* path, the
+thing that makes every other optimization safe. Write it first. Make
+the recovery a one-button operation. Then make it fast. In that
+order, the fast part stops being a source of fear and starts being a
+source of leverage.
+
+---
+
+*Related: the [latency post](/writing/latency-at-a-prop-trading-firm)
+sits one level higher and frames why this matters at a trading firm
+specifically. The [recovery post](/writing/recovery-is-the-path)
+sits one level out and covers what to build once idempotency is in
+place.*

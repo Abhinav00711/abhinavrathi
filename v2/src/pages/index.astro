@@ -1,0 +1,51 @@
+---
+import Layout from "@layouts/Layout.astro";
+import Nav from "@components/Nav.astro";
+import Hero from "@components/Hero.astro";
+import SelectedWork from "@components/SelectedWork.astro";
+import Experience from "@components/Experience.astro";
+import About from "@components/About.astro";
+import Stack from "@components/Stack.astro";
+import Writing from "@components/Writing.astro";
+import Testimonials from "@components/Testimonials.astro";
+import Contact from "@components/Contact.astro";
+import Footer from "@components/Footer.astro";
+import CommandPalette from "@components/CommandPalette.astro";
+import ScrollProgress from "@components/ScrollProgress.astro";
+import RevealMotion from "@components/RevealMotion.astro";
+import SectionDots from "@components/SectionDots.astro";
+
+const sectionList = [
+  { id: "work", label: "Work" },
+  { id: "experience", label: "Experience" },
+  { id: "about", label: "About" },
+  { id: "stack", label: "Stack" },
+  { id: "writing", label: "Writing" },
+  { id: "contact", label: "Contact" },
+];
+---
+
+<Layout>
+  <ScrollProgress />
+  <Nav />
+  <SectionDots sections={sectionList} />
+
+  <main id="main">
+    <!-- Recruiter-optimized order: Hero → Work → Experience → About → Stack → Writing → (Testimonials) → Contact.
+         Testimonials self-hides when the collection is empty, so the section
+         only appears once at least one published quote exists. -->
+    <Hero />
+    <SelectedWork />
+    <Experience />
+    <About />
+    <Stack />
+    <Writing />
+    <Testimonials />
+    <Contact />
+  </main>
+
+  <Footer />
+
+  <CommandPalette />
+  <RevealMotion />
+</Layout>

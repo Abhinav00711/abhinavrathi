@@ -1,0 +1,178 @@
+---
+/**
+ * Testimonials row.
+ *
+ * Conditionally rendered: when the `testimonials` content collection is
+ * empty (or every entry has `published: false`), the component returns
+ * null and the section is skipped entirely. That lets the scaffold ship
+ * before any quotes are collected — once the first quote lands, it
+ * appears automatically.
+ *
+ * Layout: 1 column on mobile, 2 columns at md, 3 columns at lg.
+ * Three is the recommended sweet spot per the redesign plan §1: enough
+ * for credibility, not so many that the eye glazes.
+ */
+import { Image } from "astro:assets";
+import { getCollection } from "astro:content";
+import Section from "./Section.astro";
+
+const all = (await getCollection("testimonials", (t) => t.data.published)).sort(
+  (a, b) => a.data.order - b.data.order,
+);
+
+if (all.length === 0) {
+  return null;
+}
+---
+
+<Section
+  id="testimonials"
+  eyebrow="Testimonials"
+  title="What people I've worked with say."
+  intro="Short notes from coworkers and managers — vetted, not solicited."
+>
+  <ul class="testimonials-grid reveal">
+    {
+      all.map((t) => (
+        <li class="testimonial">
+          <blockquote>
+            <p>"{t.data.quote}"</p>
+          </blockquote>
+          <footer class="testimonial__footer">
+            {t.data.photo ? (
+              <Image
+                src={t.data.photo}
+                alt=""
+                widths={[40, 80]}
+                sizes="40px"
+                class="testimonial__photo"
+              />
+            ) : (
+              <span class="testimonial__photo testimonial__photo--placeholder" aria-hidden="true">
+                {t.data.author
+                  .split(" ")
+                  .map((p) => p[0])
+                  .slice(0, 2)
+                  .join("")}
+              </span>
+            )}
+            <span class="testimonial__meta">
+              <span class="testimonial__name">
+                {t.data.linkedinUrl ? (
+                  <a href={t.data.linkedinUrl} target="_blank" rel="noreferrer noopener">
+                    {t.data.author}
+                  </a>
+                ) : (
+                  t.data.author
+                )}
+              </span>
+              <span class="testimonial__role">
+                {t.data.role}
+                {t.data.company && <> · {t.data.company}</>}
+              </span>
+            </span>
+          </footer>
+        </li>
+      ))
+    }
+  </ul>
+</Section>
+
+<style>
+  .testimonials-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  @media (min-width: 720px) {
+    .testimonials-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (min-width: 1024px) {
+    .testimonials-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .testimonial {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 20px;
+    border: 1px solid var(--color-hairline);
+    background: var(--color-panel);
+    border-radius: var(--radius-md);
+    transition: border-color 200ms ease;
+  }
+  .testimonial:hover {
+    border-color: var(--color-hairline-strong);
+  }
+  .testimonial blockquote {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .testimonial blockquote p {
+    margin: 0;
+    color: var(--color-body);
+    font-size: 15.5px;
+    line-height: 1.6;
+  }
+  .testimonial__footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .testimonial__photo {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--color-hairline-strong);
+  }
+  .testimonial__photo--placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-hairline);
+    color: var(--color-muted);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+  .testimonial__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    line-height: 1.3;
+  }
+  .testimonial__name {
+    font-size: 14px;
+    color: white;
+    font-weight: 500;
+  }
+  .testimonial__name a {
+    color: white;
+    text-decoration: none;
+    transition: color 160ms ease;
+  }
+  .testimonial__name a:hover,
+  .testimonial__name a:focus-visible {
+    color: var(--color-accent-text);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .testimonial__role {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--color-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+</style>

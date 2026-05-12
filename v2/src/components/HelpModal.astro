@@ -1,0 +1,163 @@
+---
+/**
+ * Keyboard-shortcuts help modal — opens on `?`, closes on Esc.
+ *
+ * Last shortcut required by the redesign plan §10. Sits as a singleton
+ * <dialog> next to the Cmd-K palette; both share the same keydown
+ * isTyping guard pattern so they don't clobber each other.
+ */
+---
+
+<dialog id="help-modal" class="help" aria-label="Keyboard shortcuts">
+  <form method="dialog" class="help__form">
+    <button type="submit" class="sr-only">Close</button>
+    <header class="help__header">
+      <h2 class="help__title">Keyboard shortcuts</h2>
+      <kbd class="kbd">esc</kbd>
+    </header>
+
+    <ul class="help__list">
+      <li class="help__row">
+        <span class="help__keys">
+          <kbd class="kbd">K</kbd>
+          <span class="help__or">or</span>
+          <kbd class="kbd">/</kbd>
+        </span>
+        <span class="help__label">Open quick actions</span>
+      </li>
+      <li class="help__row">
+        <span class="help__keys"><kbd class="kbd">R</kbd></span>
+        <span class="help__label">Download résumé</span>
+      </li>
+      <li class="help__row">
+        <span class="help__keys"><kbd class="kbd">T</kbd></span>
+        <span class="help__label">Cycle theme · system → dark → light</span>
+      </li>
+      <li class="help__row">
+        <span class="help__keys"><kbd class="kbd">?</kbd></span>
+        <span class="help__label">Show this help</span>
+      </li>
+      <li class="help__row">
+        <span class="help__keys"><kbd class="kbd">esc</kbd></span>
+        <span class="help__label">Close any dialog</span>
+      </li>
+    </ul>
+
+    <footer class="help__footer">
+      <span>Built for keyboard-first navigation.</span>
+    </footer>
+  </form>
+</dialog>
+
+<script>
+  (() => {
+    const dialog = document.getElementById("help-modal") as HTMLDialogElement | null;
+    if (!dialog) return;
+
+    const open = () => {
+      if (dialog.open) return;
+      // If the Cmd-K palette is open, defer — don't stack dialogs.
+      const cmdk = document.getElementById("cmdk") as HTMLDialogElement | null;
+      if (cmdk?.open) cmdk.close();
+      dialog.showModal();
+    };
+
+    const close = () => {
+      if (dialog.open) dialog.close();
+    };
+
+    // Click-outside-to-close (the form is inset; clicks on the backdrop hit
+    // the dialog element itself).
+    dialog.addEventListener("click", (e) => {
+      if (e.target === dialog) close();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      const editable = (document.activeElement as HTMLElement | null)?.isContentEditable;
+      const isTyping = tag === "INPUT" || tag === "TEXTAREA" || editable;
+
+      // `?` is Shift+/ on US layouts. Don't intercept while typing.
+      if (e.key === "?" && !isTyping) {
+        e.preventDefault();
+        open();
+        return;
+      }
+      // Esc closes if open. (The native form method=dialog handles it too,
+      // but only when the dialog has focus; this handles the case where
+      // focus drifted.)
+      if (e.key === "Escape" && dialog.open) {
+        close();
+        return;
+      }
+    });
+
+    // Allow programmatic open from CommandPalette ("Keyboard shortcuts" item).
+    document.addEventListener("help:open", () => open());
+  })();
+</script>
+
+<style>
+  .help {
+    border: 1px solid var(--color-hairline-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-panel);
+    color: var(--color-body);
+    width: min(440px, 100% - 32px);
+    padding: 0;
+    box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.6);
+  }
+  .help::backdrop {
+    background: rgba(8, 8, 10, 0.6);
+    backdrop-filter: blur(6px);
+  }
+  .help__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  .help__title {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 600;
+    color: white;
+    letter-spacing: -0.005em;
+  }
+  .help__list {
+    list-style: none;
+    margin: 0;
+    padding: 8px 0;
+  }
+  .help__row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  .help__keys {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 110px;
+  }
+  .help__or {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-faint);
+  }
+  .help__label {
+    color: var(--color-body);
+  }
+  .help__footer {
+    padding: 10px 16px;
+    border-top: 1px solid var(--color-hairline);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-faint);
+  }
+</style>

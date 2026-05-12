@@ -1,0 +1,159 @@
+---
+title: "What I learned about latency working at a prop trading firm"
+summary: "Three years of waiting for queries, fills, and reconciliations to finish. Production trading didn't teach me about microseconds — it taught me what the unit of work actually is."
+published: 2026-05-15
+draft: true
+tags: ["latency", "prop-trading", "production"]
+---
+
+I joined a prop trading firm thinking I'd learn about kernel bypass and
+lock-free queues. Three years later the most useful thing I've learned about
+latency has nothing to do with either. It has to do with mis-framing the
+unit of work — and what happens when you optimize a number that wasn't the
+one your business actually cared about.
+
+This is the lived version of that lesson, not the textbook one.
+
+## The cliché vs. the lived version
+
+The internet's version of "low-latency engineering" is mostly about kernel
+bypass, TCP tuning, and the lock-free data structures you'd write at HRT.
+That's real work, and somewhere in the firm there are people doing it. It's
+not what most engineers spend their days on. The lived version is closer to
+three different questions:
+
+Why did your nightly job get slower over six months? It didn't — you got
+more fills. The shape of the load changed and the algorithm didn't.
+
+Why can't you add more workers to make it faster? Because your bottleneck
+is the database connection pool, not your CPU. Doubling the workers just
+doubles the queue you wait in.
+
+Why do retries make the runtime *worse*, not better? Because every retry
+that lands without an idempotency key double-writes a position, and you
+spend tomorrow morning hand-cleaning state instead of sleeping. The job
+finished faster in wall-clock terms; it cost a human an hour the next day.
+
+None of those problems are about microseconds. They're about which number
+you were looking at, and whether it was the number that actually mattered.
+
+## What "latency" actually means here
+
+Here is the framing that took me longest to internalize: **latency is a
+property of the unit of work, not a property of the service**. The same
+service can be fast or slow depending on what you call "done".
+
+I'll tell it as three vignettes.
+
+**Per-fill latency.** You wrote it like a request handler. It is one —
+each fill in, each ack out. p99 measured at the handler boundary is the
+right number. Pipeline shape matters. Queue depth matters. Retry budget
+matters. This is the easiest of the three because the unit is small and
+the boundary is obvious.
+
+**Per-batch latency.** You wrote it like a script. It's a long-running
+job that competes with the request handlers for the same database. The
+job's "latency" is the wall-clock from "start" to "every row applied" —
+but the *real* latency, the one the business feels, is from "start" to
+"the dashboard shows the right number". Backpressure is not optional;
+without it, your batch starves the handlers and your p99 handler latency
+spikes for reasons nobody can find. (This was me, for an embarrassingly
+long week.)
+
+**Per-reconciliation latency.** You wrote it like a cron. It's a
+recoverable workflow with a real recovery story. Cron is the wrong
+abstraction here — cron has no opinion on what happens when run N+1
+overlaps with the leftovers of run N. The right abstraction is a state
+machine you can replay from any checkpoint. The reconciliation runtime I
+care about is the cold-start-to-final-state-from-an-empty-slate number,
+not the steady-state number.
+
+Most of the latency surprises I hit were category-confusion bugs — code I
+wrote in shape (1) accidentally getting wired up as shape (2) or (3). The
+fix was never "make it faster". The fix was "rewrite it as the shape it
+actually was".
+
+## The thing nobody tells you
+
+The hardest part of latency work at a trading firm isn't the perf work
+itself. It's the **idempotency contract** that has to land before the
+perf work can be safe.
+
+A 10× speed-up on a job that doesn't have an idempotency key is just an
+opportunity to corrupt state 10× faster. The first time I shipped one of
+these, the runtime dropped from ~38 minutes to ~4 minutes and I felt
+brilliant for about an hour. Then I learned what happens when a retry
+hits a job that was almost-but-not-quite finished: the surviving rows
+get re-applied, positions double, and somebody — me, that morning —
+spends an hour hand-cleaning a position table while the trading day
+starts without them.
+
+The fix wasn't faster code. The fix was a composite idempotency key —
+`(broker_id, fill_id, sequence)` enforced at insert time — that made the
+retry a no-op instead of a duplicate. Once the key was in, the bulk
+write didn't have to be cautious anymore. The visible win is still the
+runtime drop. The load-bearing win is that the job became *re-runnable*.
+Everything else followed from that.
+
+The lesson, repeated until I stopped having to repeat it: **idempotency
+before speed-up, every time.** If the unit of work can't be re-applied
+safely, the unit of work isn't ready for optimization. Make it
+re-runnable first, and the optimization stops being scary.
+
+## The mental model I run on now
+
+Three rules I now apply to anything that touches money:
+
+**1. Define the idempotency contract before defining the perf budget.**
+Before I open a profiler, I write a paragraph: what's the unit of work,
+what's the dedup key, how long do we remember the key. If I can't write
+that paragraph in one go, the perf work isn't ready. The contract is a
+schema decision, not a service-level decision — it survives rewrites of
+everything around it.
+
+**2. Measure the unit of work, not the service.** The p99 of "request
+handler" tells me very little about the p99 of "fill confirmed
+end-to-end". The latter is what a trader actually experiences. The
+former is what a monitoring dashboard shows by default. When the two
+disagree — and they often do, under load — trust the business unit, not
+the service unit.
+
+**3. Recovery is the load-bearing path; the happy path is the special
+case.** If I design the recovery story first, the happy path falls out
+as "recovery, but we didn't have to use it". If I design the happy path
+first, the recovery story turns into a Slack thread at 2am. I've done
+both. The first is cheaper.
+
+## What I'd say to someone joining a trading firm tomorrow
+
+Three short ones, no advice-column tone.
+
+Read the post-mortems before the architecture docs. The architecture
+diagrams tell you what the system is *meant* to do. The post-mortems
+tell you what it actually does, what it cost the firm to learn that,
+and which boundaries are load-bearing in practice (rather than in the
+diagram).
+
+When you're tempted to add a worker, look at the database connection
+pool first. Most of the time, the worker count isn't the bottleneck —
+the pool is. Doubling workers without resizing the pool just gives you
+more workers waiting in line.
+
+If you can't say what "done" means for a unit of work in one sentence,
+you're not ready to optimize it. Every meaningful perf win I've shipped
+started with a one-sentence definition of done. Every perf "win" I've
+later had to roll back started with "let's see how fast we can make
+it".
+
+The microsecond stuff is real and somebody at your firm is doing it.
+The rest of us are working on something else, and the something else is
+mostly about being correct under load, recoverable under failure, and
+specific about what the system is actually being asked to do.
+
+That turns out to be where almost all the latency you care about lives.
+
+---
+
+*If you found this useful, the [idempotency contract
+post](/writing/idempotency-contract-before-perf) goes deeper on the
+"design the contract first" pattern.*

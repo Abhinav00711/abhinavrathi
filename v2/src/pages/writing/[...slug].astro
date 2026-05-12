@@ -1,0 +1,34 @@
+---
+import { getCollection, render } from "astro:content";
+import Post from "@layouts/Post.astro";
+
+export async function getStaticPaths() {
+  // Render drafts during local dev / preview builds so previews work without
+  // a flag dance. Skip in production so they don't end up in the sitemap or
+  // become indexable by accident — they're still authorable via `npm run dev`.
+  const all = await getCollection("posts", (p) =>
+    import.meta.env.DEV ? true : !p.data.draft,
+  );
+  return all.map((entry) => ({
+    params: { slug: entry.id },
+    props: { entry },
+  }));
+}
+
+const { entry } = Astro.props;
+const { Content, remarkPluginFrontmatter } = await render(entry);
+const readTime: string | undefined = remarkPluginFrontmatter?.minutesRead;
+---
+
+<Post
+  slug={entry.id}
+  title={entry.data.title}
+  summary={entry.data.summary}
+  published={entry.data.published}
+  tags={entry.data.tags}
+  cover={entry.data.cover}
+  draft={entry.data.draft}
+  readTime={readTime}
+>
+  <Content />
+</Post>

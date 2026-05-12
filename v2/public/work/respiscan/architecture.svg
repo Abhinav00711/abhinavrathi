@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" role="img" aria-label="RespiScan 2.0 architecture: image upload reaches a preprocessor, the request is queued to a warmed inference worker that keeps the model resident, the result is cached briefly and rendered through Flask to the UI; an eval harness scores the model on every change.">
+  <title>RespiScan 2.0 — architecture</title>
+  <desc>A clinician uploads a scan through the web UI. Flask passes the image to a preprocessor (resize, normalize) and pushes a job to a warmed inference worker pool over Redis. The worker keeps the Intel oneAPI runtime resident — no cold-start on the inference path — and writes the result to a short-TTL cache. Flask reads from the cache and renders the result. An offline eval harness scores the model against a frozen dataset on every change so improvements are real, not eval drift.</desc>
+
+  <defs>
+    <style>
+      .surface { fill: #0a0a0a; }
+      .panel   { fill: #141416; }
+      .stroke  { stroke: #2a2a2d; stroke-width: 1; }
+      .strokeFaint { stroke: #1f1f22; stroke-width: 1; }
+      .accent  { stroke: #3d52fe; stroke-width: 1.5; fill: none; }
+      .accentDashed { stroke: #3d52fe; stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+      .accentFill { fill: #3d52fe; }
+      .label   { fill: #e6e6e8; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13px; }
+      .sub     { fill: #9a9aa2; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.04em; }
+      .eyebrow { fill: #6c6c74; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+      .head    { fill: #ffffff; font-family: 'Inter', system-ui, sans-serif; font-size: 14px; font-weight: 600; }
+    </style>
+    <marker id="arrowR-rs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d52fe"/>
+    </marker>
+    <marker id="arrowD-rs" viewBox="0 0 10 10" refX="5" refY="9" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d52fe"/>
+    </marker>
+  </defs>
+
+  <rect class="surface" width="1200" height="520"/>
+
+  <text x="32" y="38" class="eyebrow">RESPISCAN · ARCHITECTURE</text>
+  <text x="32" y="62" class="head">The engineering value is the loop around the model, not the model.</text>
+
+  <!-- Browser / UI -->
+  <g transform="translate(32,120)">
+    <rect class="panel stroke" width="200" height="100" rx="10"/>
+    <text x="16" y="28" class="sub">CLIENT</text>
+    <text x="16" y="52" class="head">Web UI</text>
+    <text x="16" y="72" class="label">scan upload</text>
+    <text x="16" y="88" class="label" style="fill:#9a9aa2">progress · result · audit</text>
+  </g>
+
+  <line class="accent" x1="232" y1="170" x2="304" y2="170" marker-end="url(#arrowR-rs)"/>
+
+  <!-- Flask -->
+  <g transform="translate(304,120)">
+    <rect class="panel stroke" width="180" height="100" rx="10"/>
+    <text x="16" y="28" class="sub">FLASK · PYTHON</text>
+    <text x="16" y="52" class="head">API + render</text>
+    <text x="16" y="72" class="label">/predict · /result</text>
+    <text x="16" y="88" class="label" style="fill:#9a9aa2">no model in process</text>
+  </g>
+
+  <line class="accent" x1="484" y1="170" x2="556" y2="170" marker-end="url(#arrowR-rs)"/>
+
+  <!-- Preprocessor -->
+  <g transform="translate(556,120)">
+    <rect class="panel stroke" width="180" height="100" rx="10"/>
+    <text x="16" y="28" class="sub">PREPROCESSOR</text>
+    <text x="16" y="52" class="head">Image prep</text>
+    <text x="16" y="72" class="label">resize · normalize</text>
+    <text x="16" y="88" class="label" style="fill:#9a9aa2">tensor + metadata</text>
+  </g>
+
+  <line class="accent" x1="736" y1="170" x2="808" y2="170" marker-end="url(#arrowR-rs)"/>
+
+  <!-- Warmed worker -->
+  <g transform="translate(808,90)">
+    <rect class="panel stroke" width="280" height="160" rx="10"/>
+    <text x="16" y="28" class="sub">INFERENCE · INTEL ONEAPI</text>
+    <text x="16" y="52" class="head">Warmed worker pool</text>
+    <text x="16" y="76" class="label">model resident in memory</text>
+    <text x="16" y="94" class="label">no cold-start per request</text>
+    <text x="16" y="120" class="sub" style="fill:#3d52fe">HEALTH GATE</text>
+    <text x="16" y="138" class="label">model-loaded check before routing</text>
+  </g>
+
+  <!-- Downward arrow to cache -->
+  <line class="accent" x1="948" y1="250" x2="948" y2="320" marker-end="url(#arrowD-rs)"/>
+
+  <!-- Result cache -->
+  <g transform="translate(820,340)">
+    <rect class="panel stroke" width="260" height="90" rx="10"/>
+    <text x="16" y="28" class="sub">REDIS</text>
+    <text x="16" y="52" class="head">Result cache</text>
+    <text x="16" y="74" class="label">short TTL · result + score</text>
+  </g>
+
+  <!-- Cache back to Flask (dashed - read path) -->
+  <line class="accentDashed" x1="820" y1="385" x2="394" y2="385"/>
+  <line class="accentDashed" x1="394" y1="385" x2="394" y2="225" marker-end="url(#arrowD-rs)"/>
+
+  <!-- Eval harness (offline) -->
+  <g transform="translate(32,340)">
+    <rect class="panel strokeFaint" width="460" height="90" rx="10"/>
+    <text x="16" y="28" class="sub">OFFLINE</text>
+    <text x="16" y="52" class="head">Eval harness</text>
+    <text x="16" y="74" class="label">frozen dataset · scripted · runs on every model change</text>
+  </g>
+
+  <!-- footer note -->
+  <g transform="translate(32,460)">
+    <rect class="panel strokeFaint" width="1136" height="40" rx="8"/>
+    <circle cx="20" cy="20" r="3" class="accentFill"/>
+    <text x="36" y="25" class="label" style="fill:#9a9aa2">warmed worker is the load-bearing piece · p95 inference 50–100ms · validation AUC 0.92–0.94</text>
+  </g>
+</svg>

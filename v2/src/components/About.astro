@@ -1,0 +1,83 @@
+---
+import { Image } from "astro:assets";
+import Section from "./Section.astro";
+import abhinavAvatar from "@assets/people/abhinav.jpg";
+---
+
+<Section id="about" eyebrow="About" title="Why I do this work.">
+  <div class="grid grid-cols-1 gap-12 md:grid-cols-3 md:gap-16">
+    <!-- 2/3 column: prose -->
+    <div class="reveal col-span-2 flex flex-col gap-5 text-[17px]" style="color: var(--color-body); line-height: 1.7;">
+      <p>
+        I do applied ML at a place where the model's output becomes a real
+        order — which is a very effective way to learn what &quot;good
+        enough&quot; isn't. Most of my work sits at the seam between a model
+        and a production system: the eval harness, the serving layer, the
+        latency budget, the human override. When the unit is dollars,
+        off-by-one errors and silent regressions both get loud fast.
+      </p>
+      <p>
+        Today that work lives inside Axxela, a prop trading firm. The stack is
+        unfashionable in the best way — Python, Flask, MySQL, Redis, a few
+        well-placed background workers, and a TensorFlow / scikit-learn /
+        Llama-Index ML layer wrapped in services that recover cleanly. I own
+        the loop end-to-end: schema, model, evaluation, deploy, and
+        post-incident review.
+      </p>
+      <p>
+        Before Axxela I led ML at Athena Education and built internal tooling
+        at BNP Paribas — first taste of code running against real money.
+        Earlier still, two mobile internships (Flutter at HIH7, Java/Android
+        at RevMeUp) where I learned to read a stack trace under deadline. The
+        thread is the same: production code, real users, and the discipline
+        that comes from knowing exactly what happens when something breaks.
+      </p>
+      <p style="color: var(--color-muted); font-size: 15px;">
+        I'm currently open to senior ML / ML-platform / applied-ML and
+        backend roles. Kolkata-based; remote, hybrid, or relocation considered.
+      </p>
+    </div>
+
+    <!-- 1/3 column: photo + currently widget -->
+    <aside class="reveal flex flex-col gap-6">
+      <figure
+        class="overflow-hidden border"
+        style="border-color: var(--color-hairline); border-radius: var(--radius-md); aspect-ratio: 4/5; background: var(--color-panel);"
+      >
+        {/* Astro Image — emits AVIF + WebP + responsive srcset at build,
+            with width/height attributes inferred from the source so we get
+            zero CLS without hand-coding numbers. */}
+        <Image
+          src={abhinavAvatar}
+          alt="Abhinav Rathi"
+          widths={[240, 480, 720]}
+          sizes="(min-width: 768px) 320px, 100vw"
+          loading="lazy"
+          decoding="async"
+          style="width: 100%; height: 100%; object-fit: cover; object-position: center;"
+        />
+      </figure>
+
+      <div
+        class="rounded-md border p-5"
+        style="border-color: var(--color-hairline); background: var(--color-panel);"
+      >
+        <p class="eyebrow mb-3">Currently</p>
+        <ul class="flex flex-col gap-2 text-[14px]" style="color: var(--color-body);">
+          <li>
+            <span class="mono text-faint" style="color: var(--color-faint);">shipping</span>
+            <span class="ml-2">backend services at Axxela</span>
+          </li>
+          <li>
+            <span class="mono text-faint" style="color: var(--color-faint);">reading</span>
+            <span class="ml-2">Designing Data-Intensive Applications</span>
+          </li>
+          <li>
+            <span class="mono text-faint" style="color: var(--color-faint);">writing</span>
+            <span class="ml-2">monthly notes on production engineering</span>
+          </li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</Section>

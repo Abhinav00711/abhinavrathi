@@ -1,0 +1,119 @@
+---
+import Section from "./Section.astro";
+
+/**
+ * Roles — single-column, hairline-rule timeline.
+ * Each role leads with ONE quantified outcome bullet (per plan §4 / §10).
+ *
+ */
+const roles = [
+  {
+    company: "Axxela",
+    role: "Associate — Development & Operations",
+    location: "Kolkata, IN",
+    dates: "Sep 2025 — Present",
+    current: true,
+    bullets: [
+      "Cut nightly position-reconciliation runtime from 38 min to 4 min; eliminated ~1 hr/day of next-morning manual cleanup by making the job idempotent before making it fast.",
+      "Own backend work end-to-end — schema design, service implementation, deploy, and post-incident review.",
+      "Operating mindset: idempotency, write-ahead logs, bounded retries, observable failure modes.",
+    ],
+    tech: ["Python", "Flask", "FastAPI", "MySQL", "Redis", "Docker", "AWS", ".NET", "gRPC", "FIX"],
+  },
+  {
+    company: "Athena Education",
+    role: "Senior ML Engineer",
+    location: "Gurugram, IN",
+    dates: "Jun 2024 — Aug 2025",
+    bullets: [
+      "Led ML projects across NLP and computer vision; took models from notebook to deployed service.",
+      "Designed evaluation harnesses so model regressions surfaced before they hit users.",
+    ],
+    tech: ["Python", "TensorFlow", "LangChain", "FastAPI", "Streamlit", "AWS"],
+  },
+  {
+    company: "BNP Paribas",
+    role: "Application Developer Intern",
+    location: "Bengaluru, IN",
+    dates: "Jan 2024 — May 2024",
+    bullets: [
+      "Built internal tooling for a global investment bank — first taste of code that runs against real money.",
+    ],
+    tech: ["Python", "Django", "TensorFlow", "PostgreSQL", "MySQL", "JavaScript"],
+  },
+  {
+    company: "HIH7 Webtech",
+    role: "Android Developer Intern",
+    location: "Kolkata, IN",
+    dates: "Dec 2021 — Apr 2022",
+    bullets: [
+      "Shipped consumer-facing mobile features in production; learned the full release loop.",
+    ],
+    tech: ["Flutter", "Firebase", "REST API", "GitHub Actions"],
+  },
+  {
+    company: "RevMeUp",
+    role: "Android Developer Intern",
+    location: "Remote, IN",
+    dates: "Feb 2021 — Apr 2021",
+    bullets: [
+      "First production codebase — wired up custom APIs against MongoDB, integrated Crashlytics, and learned to read a stack trace under deadline.",
+    ],
+    tech: ["Java", "Android Studio", "MongoDB", "Firebase"],
+  },
+];
+---
+
+<Section
+  id="experience"
+  eyebrow="Experience"
+  title="Five years of shipping in production."
+>
+  <ol class="relative ml-3" style="border-left: 1px solid var(--color-hairline);">
+    {
+      roles.map((r) => (
+        <li class="reveal relative pl-8 pb-12 last:pb-0">
+          <span
+            class="absolute -left-[5px] top-2 inline-block h-[10px] w-[10px] rounded-full"
+            style={`background: ${r.current ? "var(--color-accent)" : "var(--color-hairline-strong)"}; box-shadow: ${r.current ? "0 0 0 4px var(--color-accent-glow)" : "none"};`}
+          />
+
+          <header class="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+            <h3
+              class="text-white"
+              style="font-size: 20px; font-weight: 600; letter-spacing: -0.01em;"
+            >
+              {r.role}{" "}
+              <span style="color: var(--color-muted); font-weight: 400;">
+                · {r.company}
+              </span>
+            </h3>
+            <p
+              class="mono text-[12px] uppercase tracking-wider"
+              style="color: var(--color-faint);"
+            >
+              {r.dates} · {r.location}
+            </p>
+          </header>
+
+          <ul class="mt-4 flex flex-col gap-2">
+            {r.bullets.map((b) => (
+              <li
+                class="text-[15px]"
+                style="color: var(--color-body); line-height: 1.55;"
+              >
+                {b}
+              </li>
+            ))}
+          </ul>
+
+          <ul class="mt-4 flex flex-wrap gap-1.5">
+            {r.tech.map((t) => (
+              <li class="chip">{t}</li>
+            ))}
+          </ul>
+        </li>
+      ))
+    }
+  </ol>
+</Section>

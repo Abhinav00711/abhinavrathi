@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 540" role="img" aria-label="Order ingestion pipeline architecture: N broker adapters feed a single normalization layer with per-broker high-water-mark recovery, write to MySQL with idempotency, then publish to a downstream notification queue.">
+  <title>Order ingestion — architecture</title>
+  <desc>Each broker has a small adapter implementing fetch_batch, parse, and high_water_mark. All adapters feed a single canonical normalization step. An idempotency check guards the MySQL write. Per-broker high-water-mark tables drive adapter-specific recovery on outages. Downstream services read from a notification queue.</desc>
+
+  <defs>
+    <style>
+      .surface { fill: #0a0a0a; }
+      .panel   { fill: #141416; }
+      .stroke  { stroke: #2a2a2d; stroke-width: 1; }
+      .strokeFaint { stroke: #1f1f22; stroke-width: 1; }
+      .accent  { stroke: #3d52fe; stroke-width: 1.5; fill: none; }
+      .accentFill { fill: #3d52fe; }
+      .label   { fill: #e6e6e8; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13px; }
+      .sub     { fill: #9a9aa2; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.04em; }
+      .eyebrow { fill: #6c6c74; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+      .head    { fill: #ffffff; font-family: 'Inter', system-ui, sans-serif; font-size: 14px; font-weight: 600; }
+    </style>
+    <marker id="arrowR2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d52fe"/>
+    </marker>
+    <marker id="arrowD2" viewBox="0 0 10 10" refX="5" refY="9" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d52fe"/>
+    </marker>
+  </defs>
+
+  <rect class="surface" width="1200" height="540"/>
+
+  <text x="32" y="38" class="eyebrow">ORDER-INGESTION · ARCHITECTURE</text>
+  <text x="32" y="62" class="head">One service, pluggable adapters, recovery-first.</text>
+
+  <!-- N broker adapters column -->
+  <g transform="translate(32,110)">
+    <text x="0" y="0" class="sub">N BROKER ADAPTERS</text>
+    <g transform="translate(0,12)">
+      <rect class="panel stroke" width="220" height="60" rx="8"/>
+      <text x="16" y="24" class="head">broker_a/</text>
+      <text x="16" y="44" class="label">FIX · fetch_batch()</text>
+    </g>
+    <g transform="translate(0,82)">
+      <rect class="panel stroke" width="220" height="60" rx="8"/>
+      <text x="16" y="24" class="head">broker_b/</text>
+      <text x="16" y="44" class="label">CSV · sftp drop</text>
+    </g>
+    <g transform="translate(0,152)">
+      <rect class="panel stroke" width="220" height="60" rx="8"/>
+      <text x="16" y="24" class="head">broker_c/</text>
+      <text x="16" y="44" class="label">webhook · idempotent</text>
+    </g>
+    <g transform="translate(0,222)">
+      <rect class="panel strokeFaint" width="220" height="40" rx="8"/>
+      <text x="16" y="26" class="label" style="fill:#6c6c74">+ N more, same shape</text>
+    </g>
+  </g>
+
+  <!-- arrows from each adapter -->
+  <line class="accent" x1="252" y1="142" x2="396" y2="200" marker-end="url(#arrowR2)"/>
+  <line class="accent" x1="252" y1="212" x2="396" y2="220" marker-end="url(#arrowR2)"/>
+  <line class="accent" x1="252" y1="282" x2="396" y2="240" marker-end="url(#arrowR2)"/>
+
+  <!-- normalization -->
+  <g transform="translate(396,160)">
+    <rect class="panel stroke" width="240" height="120" rx="10"/>
+    <text x="16" y="28" class="sub">PYTHON</text>
+    <text x="16" y="52" class="head">Normalization layer</text>
+    <text x="16" y="74" class="label">→ canonical schema</text>
+    <text x="16" y="92" class="label">→ enrich · validate</text>
+    <text x="16" y="110" class="label" style="fill:#9a9aa2">trade · fill · cancel</text>
+  </g>
+
+  <line class="accent" x1="636" y1="220" x2="700" y2="220" marker-end="url(#arrowR2)"/>
+
+  <!-- idempotency -->
+  <g transform="translate(700,160)">
+    <rect class="panel stroke" width="220" height="120" rx="10"/>
+    <text x="16" y="28" class="sub" style="fill:#3d52fe">IDEMPOTENCY</text>
+    <text x="16" y="52" class="head">Dedup check</text>
+    <text x="16" y="74" class="label">SELECT 1 FROM ledger</text>
+    <text x="16" y="92" class="label">WHERE (broker, ext_id)</text>
+    <text x="16" y="110" class="label" style="fill:#9a9aa2">drop on conflict</text>
+  </g>
+
+  <line class="accent" x1="920" y1="220" x2="980" y2="220" marker-end="url(#arrowR2)"/>
+
+  <!-- MySQL -->
+  <g transform="translate(980,160)">
+    <rect class="panel stroke" width="188" height="120" rx="10"/>
+    <text x="16" y="28" class="sub">MYSQL</text>
+    <text x="16" y="52" class="head">trade ledger</text>
+    <text x="16" y="74" class="label">canonical · append</text>
+    <text x="16" y="92" class="label">+ hwm per broker</text>
+  </g>
+
+  <!-- recovery loop (return arrow) -->
+  <path class="accent" d="M 1074 280 Q 1074 360 506 360" marker-end="url(#arrowR2)"/>
+  <text x="540" y="354" class="sub" style="fill:#9a9aa2">on outage: replay from per-broker high-water mark</text>
+
+  <!-- downstream queue -->
+  <g transform="translate(396,400)">
+    <rect class="panel stroke" width="772" height="60" rx="10"/>
+    <text x="16" y="24" class="sub">REDIS · STREAMS</text>
+    <text x="16" y="46" class="head">downstream notification queue → reconciler · risk · ops dashboard</text>
+  </g>
+
+  <line class="accent" x1="780" y1="280" x2="780" y2="400" marker-end="url(#arrowD2)"/>
+
+  <!-- footer -->
+  <g transform="translate(32,484)">
+    <rect class="panel strokeFaint" width="1136" height="40" rx="8"/>
+    <circle cx="20" cy="20" r="3" class="accentFill"/>
+    <text x="36" y="25" class="label" style="fill:#9a9aa2">recovery code is per-adapter on purpose · 0 lost confirmations across broker outages</text>
+  </g>
+</svg>

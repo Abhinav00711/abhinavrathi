@@ -1,0 +1,21 @@
+## Template — copy this file, rename to <name>.yaml, fill it in, set
+## `published: true` once the author has signed off on the wording.
+## Files prefixed with `_` are NOT special to Astro; this just sorts to
+## the top of the directory and serves as living documentation.
+## Set `published: false` so it doesn't render anywhere.
+quote: |
+  Two to three short sentences. Concrete, specific, in the author's
+  voice. Bias toward "Abhinav did X, the result was Y" over generic
+  praise. Strip filler so each sentence carries weight.
+author: First Last
+role: Senior Engineer
+company: Axxela
+## Optional. If present, makes the author name clickable.
+# linkedinUrl: https://linkedin.com/in/...
+## Optional. Place the file under src/assets/people/<slug>.jpg first,
+## then reference it relative to this file:
+# photo: ../../assets/people/first-last.jpg
+## Order is ascending — lower numbers render first.
+order: 1
+## When ready, flip this to `true`. Until then, the entry is a no-op.
+published: false

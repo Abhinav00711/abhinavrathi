@@ -1,0 +1,85 @@
+---
+import ThemeSwitcher from "./ThemeSwitcher.astro";
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const links = [
+  { href: "#work", label: "Work" },
+  { href: "#experience", label: "Experience" },
+  { href: "#about", label: "About" },
+  { href: "#stack", label: "Stack" },
+  { href: "#writing", label: "Writing" },
+  { href: "#contact", label: "Contact" },
+];
+---
+
+<header class="fixed inset-x-0 top-0 z-40 backdrop-blur-md">
+  <div class="container-prose flex h-16 items-center justify-between gap-6">
+    <a
+      href={`${base}/`}
+      aria-label="Abhinav Rathi — home"
+      class="font-mono text-sm tracking-tight text-white"
+    >
+      <span class="text-accent">AR</span><span class="text-faint">/</span><span
+        class="text-muted">portfolio</span
+      >
+    </a>
+
+    <nav aria-label="Primary" class="hidden items-center gap-6 md:flex">
+      {
+        links.map((link) => (
+          <a
+            href={link.href}
+            class="text-sm text-muted transition-colors hover:text-white"
+          >
+            {link.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="flex items-center gap-3">
+      <ThemeSwitcher />
+      <button
+        type="button"
+        data-cmdk-trigger
+        class="flex items-center gap-2 rounded-md border border-hairline-strong bg-panel px-3 py-1.5 text-xs text-muted transition-colors hover:border-accent hover:text-accent"
+        aria-label="Open command palette"
+      >
+        <span class="hidden sm:inline">Quick actions</span>
+        <span class="kbd">K</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="border-b" style="border-color: var(--color-hairline);"></div>
+</header>
+
+<style>
+  header {
+    background: color-mix(in srgb, var(--color-surface) 70%, transparent);
+  }
+  .text-accent {
+    color: var(--color-accent-text);
+  }
+  .text-muted {
+    color: var(--color-muted);
+  }
+  .text-faint {
+    color: var(--color-faint);
+  }
+  .border-hairline-strong {
+    border-color: var(--color-hairline-strong);
+  }
+  .bg-panel {
+    background: var(--color-panel);
+  }
+  .hover\:border-accent:hover {
+    border-color: var(--color-accent);
+  }
+  .hover\:text-accent:hover {
+    color: var(--color-accent-text);
+  }
+  .hover\:text-white:hover {
+    color: white;
+  }
+</style>

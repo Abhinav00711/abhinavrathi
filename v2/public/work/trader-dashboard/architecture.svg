@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" role="img" aria-label="Trader and ops dashboard architecture: browser hits Flask which renders HTMX partials, Redis serves a 30 second TTL aggregate cache, MySQL is hit only when the cache expires.">
+  <title>Trader dashboard — architecture</title>
+  <desc>Browser issues HTMX-style partial requests. Flask renders server-side fragments. The aggregate cache is held in Redis with a 30 second TTL — the dashboard hits Redis on every refresh and MySQL only when the TTL expires. Auth via internal SSO. Three screens, each answering one question.</desc>
+
+  <defs>
+    <style>
+      .surface { fill: #0a0a0a; }
+      .panel   { fill: #141416; }
+      .stroke  { stroke: #2a2a2d; stroke-width: 1; }
+      .strokeFaint { stroke: #1f1f22; stroke-width: 1; }
+      .accent  { stroke: #3d52fe; stroke-width: 1.5; fill: none; }
+      .accentDashed { stroke: #3d52fe; stroke-width: 1.2; stroke-dasharray: 4 4; fill: none; }
+      .accentFill { fill: #3d52fe; }
+      .label   { fill: #e6e6e8; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13px; }
+      .sub     { fill: #9a9aa2; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.04em; }
+      .eyebrow { fill: #6c6c74; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+      .head    { fill: #ffffff; font-family: 'Inter', system-ui, sans-serif; font-size: 14px; font-weight: 600; }
+    </style>
+    <marker id="arrowR3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d52fe"/>
+    </marker>
+  </defs>
+
+  <rect class="surface" width="1200" height="500"/>
+
+  <text x="32" y="38" class="eyebrow">TRADER-DASHBOARD · ARCHITECTURE</text>
+  <text x="32" y="62" class="head">Three screens, each answers one question. Real-time without hammering MySQL.</text>
+
+  <!-- Browser column with three screens -->
+  <g transform="translate(32,110)">
+    <text x="0" y="0" class="sub">BROWSER · HTMX</text>
+    <g transform="translate(0,12)">
+      <rect class="panel stroke" width="220" height="56" rx="8"/>
+      <text x="16" y="22" class="head">/positions</text>
+      <text x="16" y="42" class="label" style="fill:#9a9aa2">"what's my position?"</text>
+    </g>
+    <g transform="translate(0,80)">
+      <rect class="panel stroke" width="220" height="56" rx="8"/>
+      <text x="16" y="22" class="head">/batches</text>
+      <text x="16" y="42" class="label" style="fill:#9a9aa2">"did 11am batch run?"</text>
+    </g>
+    <g transform="translate(0,148)">
+      <rect class="panel stroke" width="220" height="56" rx="8"/>
+      <text x="16" y="22" class="head">/fills</text>
+      <text x="16" y="42" class="label" style="fill:#9a9aa2">"why was this rejected?"</text>
+    </g>
+  </g>
+
+  <!-- arrows browser → Flask -->
+  <line class="accent" x1="252" y1="148" x2="328" y2="220" marker-end="url(#arrowR3)"/>
+  <line class="accent" x1="252" y1="216" x2="328" y2="240" marker-end="url(#arrowR3)"/>
+  <line class="accent" x1="252" y1="284" x2="328" y2="260" marker-end="url(#arrowR3)"/>
+
+  <!-- Flask -->
+  <g transform="translate(328,170)">
+    <rect class="panel stroke" width="260" height="140" rx="10"/>
+    <text x="16" y="28" class="sub">FLASK · JINJA</text>
+    <text x="16" y="52" class="head">Server-rendered fragments</text>
+    <text x="16" y="76" class="label">hx-get → partial swap</text>
+    <text x="16" y="94" class="label">no SPA, no build step</text>
+    <text x="16" y="118" class="sub" style="fill:#3d52fe">SSO</text>
+    <text x="44" y="118" class="label">internal · session cookie</text>
+  </g>
+
+  <!-- arrow Flask → Redis -->
+  <line class="accent" x1="588" y1="240" x2="668" y2="240" marker-end="url(#arrowR3)"/>
+  <text x="600" y="228" class="sub" style="fill:#9a9aa2">cache hit</text>
+
+  <!-- Redis -->
+  <g transform="translate(668,170)">
+    <rect class="panel stroke" width="240" height="140" rx="10"/>
+    <text x="16" y="28" class="sub">REDIS</text>
+    <text x="16" y="52" class="head">Aggregate cache</text>
+    <text x="16" y="76" class="label">TTL: 30 seconds</text>
+    <text x="16" y="94" class="label">key per (screen, scope)</text>
+    <text x="16" y="118" class="label" style="fill:#9a9aa2">refresh on TTL expiry</text>
+  </g>
+
+  <!-- arrow Redis → MySQL (dashed, on-miss only) -->
+  <line class="accentDashed" x1="908" y1="240" x2="988" y2="240" marker-end="url(#arrowR3)"/>
+  <text x="912" y="228" class="sub" style="fill:#6c6c74">on miss</text>
+
+  <!-- MySQL -->
+  <g transform="translate(988,170)">
+    <rect class="panel stroke" width="180" height="140" rx="10"/>
+    <text x="16" y="28" class="sub">MYSQL</text>
+    <text x="16" y="52" class="head">positions, fills</text>
+    <text x="16" y="76" class="label">aggregation views</text>
+    <text x="16" y="94" class="label" style="fill:#9a9aa2">millions of rows</text>
+    <text x="16" y="118" class="label" style="fill:#9a9aa2">queried only on miss</text>
+  </g>
+
+  <!-- footer -->
+  <g transform="translate(32,440)">
+    <rect class="panel strokeFaint" width="1136" height="40" rx="8"/>
+    <circle cx="20" cy="20" r="3" class="accentFill"/>
+    <text x="36" y="25" class="label" style="fill:#9a9aa2">feels real-time to humans · busiest screen p95 &lt; 400ms · ~80% drop in eng "can you check…" interrupts</text>
+  </g>
+</svg>

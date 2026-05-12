@@ -1,0 +1,78 @@
+---
+import Section from "./Section.astro";
+import ContactForm from "./ContactForm.astro";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+
+<Section
+  id="contact"
+  eyebrow="Contact"
+  title="Get in touch."
+  intro="I reply within 24h on weekdays."
+>
+  <div
+    class="reveal mx-auto max-w-2xl rounded-md border p-8 md:p-10"
+    style="border-color: var(--color-hairline); background: var(--color-panel);"
+  >
+    <div class="flex flex-col gap-3">
+      <a
+        href="mailto:rathiabhinav01@gmail.com?subject=Senior%20role%20inquiry&body=Hi%20Abhinav%2C%0A%0A"
+        class="btn btn-primary w-full justify-center"
+      >
+        rathiabhinav01@gmail.com
+      </a>
+      <a
+        href="https://calendly.com/abhinav-rathi"
+        target="_blank"
+        rel="noreferrer noopener"
+        class="btn btn-secondary w-full justify-center"
+      >
+        Book an intro call →
+      </a>
+    </div>
+
+    <div
+      class="mt-6 flex items-center justify-center gap-4 border-t pt-6"
+      style="border-color: var(--color-hairline);"
+    >
+      <a
+        href="https://github.com/Abhinav00711"
+        target="_blank"
+        rel="noreferrer noopener"
+        class="contact-social font-mono text-sm transition-colors"
+      >
+        GitHub
+      </a>
+      <span style="color: var(--color-faint);">·</span>
+      <a
+        href="https://linkedin.com/in/rathiabhinav01"
+        target="_blank"
+        rel="noreferrer noopener"
+        class="contact-social font-mono text-sm transition-colors"
+      >
+        LinkedIn
+      </a>
+      <span style="color: var(--color-faint);">·</span>
+      <a
+        href={`${base}/Abhinav-Rathi.pdf`}
+        class="contact-social font-mono text-sm transition-colors"
+      >
+        Résumé (PDF)
+      </a>
+    </div>
+
+    <ContactForm />
+  </div>
+</Section>
+
+<style>
+  /* Replaces inline onmouseover/onmouseout — same behavior, hits :hover and
+     :focus-visible so keyboard users get the accent feedback too. */
+  .contact-social {
+    color: var(--color-muted);
+  }
+  .contact-social:hover,
+  .contact-social:focus-visible {
+    color: var(--color-accent-text);
+  }
+</style>

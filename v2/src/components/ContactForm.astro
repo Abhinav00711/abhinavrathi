@@ -1,0 +1,220 @@
+---
+/**
+ * Inline contact form for the Contact card.
+ *
+ * The site builds to static HTML on GitHub Pages, so this form needs an
+ * external endpoint to actually deliver email. Two clean paths, ranked
+ * by infra cost:
+ *
+ *   1. **Formspree** — easiest. Sign up, take the per-form endpoint
+ *      (`https://formspree.io/f/<id>`), drop into `.env`. No backend.
+ *
+ *   2. **Resend + serverless** — when ready to self-host. Deploy
+ *      `scripts/contact-resend-handler.ts` to a Cloudflare Worker or a
+ *      Vercel function. Set the same `PUBLIC_CONTACT_ENDPOINT` to its URL
+ *      and add `RESEND_API_KEY` to that runtime's secrets. The form below
+ *      posts the same JSON either way.
+ *
+ * Until either is configured, the form gracefully degrades: with JS
+ * enabled, the submit button does an inline `mailto:` fallback so the
+ * recruiter still gets a working path; with JS disabled, the form just
+ * doesn't submit anywhere — but the surrounding Contact card keeps the
+ * working `mailto:` and Calendly buttons above it.
+ *
+ * Set `PUBLIC_CONTACT_ENDPOINT` in `.env` (must be `PUBLIC_*` to expose to
+ * the client). When unset, the form falls back to mailto.
+ */
+const endpoint = import.meta.env.PUBLIC_CONTACT_ENDPOINT ?? "";
+---
+
+<details class="contact-form" data-endpoint={endpoint}>
+  <summary>
+    <span>Or send a quick note</span>
+    <span class="kbd">↓</span>
+  </summary>
+
+  <form
+    class="contact-form__body"
+    method="POST"
+    action={endpoint || "#"}
+    aria-label="Contact form"
+  >
+    <label class="contact-form__field">
+      <span>Your name</span>
+      <input type="text" name="name" required autocomplete="name" />
+    </label>
+    <label class="contact-form__field">
+      <span>Email</span>
+      <input type="email" name="email" required autocomplete="email" />
+    </label>
+    <label class="contact-form__field">
+      <span>What's the role / project?</span>
+      <textarea name="message" rows="4" required></textarea>
+    </label>
+
+    {/* Honeypot — bots fill it, humans don't see it. Server should reject
+        any submission where _gotcha is non-empty. */}
+    <input
+      type="text"
+      name="_gotcha"
+      tabindex="-1"
+      autocomplete="off"
+      style="position:absolute;left:-9999px;"
+      aria-hidden="true"
+    />
+
+    <button type="submit" class="btn btn-primary">
+      Send <span aria-hidden="true">→</span>
+    </button>
+
+    <p class="contact-form__status" data-status hidden></p>
+  </form>
+</details>
+
+<script>
+  // Progressive enhancement: with JS enabled, intercept submit and POST as
+  // JSON; show inline status. Without JS, the native form submit takes over
+  // and posts directly — works equally well with Formspree's built-in
+  // multipart handler.
+  (() => {
+    const root = document.querySelector<HTMLDetailsElement>(".contact-form");
+    if (!root) return;
+    const form = root.querySelector<HTMLFormElement>("form");
+    const status = root.querySelector<HTMLParagraphElement>("[data-status]");
+    if (!form || !status) return;
+
+    const endpoint = root.dataset.endpoint?.trim();
+
+    // No endpoint configured? Hand back to mailto. Recruiters get a working
+    // experience even when Formspree / Resend aren't wired yet.
+    const mailtoFallback = (data: FormData) => {
+      const name = String(data.get("name") ?? "");
+      const email = String(data.get("email") ?? "");
+      const msg = String(data.get("message") ?? "");
+      const subject = encodeURIComponent("Senior role inquiry");
+      const body = encodeURIComponent(
+        `Hi Abhinav,\n\n${msg}\n\n— ${name}\n${email}`
+      );
+      window.location.href = `mailto:rathiabhinav01@gmail.com?subject=${subject}&body=${body}`;
+    };
+
+    form.addEventListener("submit", async (e) => {
+      // Honeypot — silent reject.
+      const honeypot = (form.elements.namedItem("_gotcha") as HTMLInputElement | null)?.value;
+      if (honeypot) {
+        e.preventDefault();
+        return;
+      }
+
+      if (!endpoint) {
+        e.preventDefault();
+        const data = new FormData(form);
+        mailtoFallback(data);
+        return;
+      }
+
+      e.preventDefault();
+      status.hidden = false;
+      status.textContent = "Sending…";
+      status.dataset.state = "pending";
+
+      try {
+        const data = new FormData(form);
+        const json: Record<string, string> = {};
+        data.forEach((v, k) => {
+          if (typeof v === "string") json[k] = v;
+        });
+
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(json),
+        });
+        if (!res.ok) throw new Error(`status ${res.status}`);
+
+        status.textContent = "Sent. I'll reply within 24h.";
+        status.dataset.state = "ok";
+        form.reset();
+      } catch (err) {
+        status.textContent = "Send failed. Falling back to email…";
+        status.dataset.state = "error";
+        const data = new FormData(form);
+        setTimeout(() => mailtoFallback(data), 800);
+      }
+    });
+  })();
+</script>
+
+<style>
+  .contact-form {
+    margin-top: 24px;
+    border-top: 1px solid var(--color-hairline);
+    padding-top: 20px;
+  }
+  .contact-form > summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--color-muted);
+    padding: 4px 0;
+  }
+  .contact-form > summary::-webkit-details-marker {
+    display: none;
+  }
+  .contact-form[open] > summary {
+    color: var(--color-body);
+  }
+  .contact-form__body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 20px;
+  }
+  .contact-form__field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .contact-form__field span {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-faint);
+  }
+  .contact-form__field input,
+  .contact-form__field textarea {
+    background: var(--color-surface);
+    color: var(--color-body);
+    border: 1px solid var(--color-hairline-strong);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .contact-form__field input:focus,
+  .contact-form__field textarea:focus {
+    border-color: var(--color-accent);
+    outline: none;
+  }
+  .contact-form__field textarea {
+    resize: vertical;
+    min-height: 96px;
+  }
+  .contact-form__status {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    margin: 0;
+  }
+  .contact-form__status[data-state="ok"] {
+    color: var(--color-accent-text);
+  }
+  .contact-form__status[data-state="error"] {
+    color: #f5564a;
+  }
+</style>

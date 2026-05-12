@@ -1,0 +1,365 @@
+---
+/**
+ * Cmd-K command palette — vanilla, zero dependencies.
+ * Opens with Cmd/Ctrl+K, /, or any [data-cmdk-trigger] click.
+ * Focus-trapped, keyboard-navigable, reduced-motion aware.
+ */
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const resumeUrl = `${base}/Abhinav-Rathi.pdf`;
+---
+
+<dialog
+  id="cmdk"
+  class="cmdk"
+  aria-label="Quick actions"
+  data-resume-url={resumeUrl}
+>
+  <form method="dialog" class="cmdk__form">
+    <button type="submit" class="sr-only">Close</button>
+    <header class="cmdk__header">
+      <input
+        type="text"
+        id="cmdk-input"
+        placeholder="Type a command…"
+        autocomplete="off"
+        spellcheck="false"
+        aria-label="Command input"
+      />
+      <kbd class="kbd">esc</kbd>
+    </header>
+
+    <ul class="cmdk__list" role="listbox">
+      <li class="cmdk__group">Contact</li>
+      <li>
+        <a
+          class="cmdk__item"
+          data-cmd
+          href="mailto:rathiabhinav01@gmail.com?subject=Senior%20role%20inquiry&body=Hi%20Abhinav%2C%0A%0A"
+        >
+          <span>Email me</span>
+          <span class="cmdk__hint">rathiabhinav01@gmail.com</span>
+        </a>
+      </li>
+      <li>
+        <a
+          class="cmdk__item"
+          data-cmd
+          href="https://calendly.com/abhinav-rathi"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          <span>Schedule a call</span>
+          <span class="cmdk__hint">Calendly</span>
+        </a>
+      </li>
+
+      <li class="cmdk__group">Files</li>
+      <li>
+        <a class="cmdk__item" data-cmd href={`${base}/Abhinav-Rathi.pdf`}>
+          <span>Download résumé</span>
+          <span class="cmdk__hint kbd-row"><kbd class="kbd">R</kbd></span>
+        </a>
+      </li>
+
+      <li class="cmdk__group">Display</li>
+      <li>
+        <button class="cmdk__item" data-cmd type="button" data-cmd-action="theme-cycle">
+          <span>Toggle theme (system → dark → light)</span>
+          <span class="cmdk__hint kbd-row"><kbd class="kbd">T</kbd></span>
+        </button>
+      </li>
+      <li>
+        <button class="cmdk__item" data-cmd type="button" data-cmd-action="help-open">
+          <span>Keyboard shortcuts</span>
+          <span class="cmdk__hint kbd-row"><kbd class="kbd">?</kbd></span>
+        </button>
+      </li>
+
+      <li class="cmdk__group">Navigate</li>
+      <li>
+        <a class="cmdk__item" data-cmd href="#work">
+          <span>Selected work</span>
+          <span class="cmdk__hint">↓ work</span>
+        </a>
+      </li>
+      <li>
+        <a class="cmdk__item" data-cmd href="#experience">
+          <span>Experience</span>
+          <span class="cmdk__hint">↓ experience</span>
+        </a>
+      </li>
+      <li>
+        <a class="cmdk__item" data-cmd href="#writing">
+          <span>Writing</span>
+          <span class="cmdk__hint">↓ writing</span>
+        </a>
+      </li>
+      <li>
+        <a class="cmdk__item" data-cmd href={`${base}/writing/`}>
+          <span>All posts</span>
+          <span class="cmdk__hint">/writing</span>
+        </a>
+      </li>
+      <li>
+        <a class="cmdk__item" data-cmd href={`${base}/now/`}>
+          <span>What I'm doing now</span>
+          <span class="cmdk__hint">/now</span>
+        </a>
+      </li>
+      <li>
+        <a class="cmdk__item" data-cmd href={`${base}/rss.xml`}>
+          <span>RSS feed</span>
+          <span class="cmdk__hint">/rss.xml</span>
+        </a>
+      </li>
+
+      <li class="cmdk__group">Social</li>
+      <li>
+        <a
+          class="cmdk__item"
+          data-cmd
+          href="https://github.com/Abhinav00711"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          <span>GitHub</span>
+          <span class="cmdk__hint">@Abhinav00711</span>
+        </a>
+      </li>
+      <li>
+        <a
+          class="cmdk__item"
+          data-cmd
+          href="https://linkedin.com/in/rathiabhinav01"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          <span>LinkedIn</span>
+          <span class="cmdk__hint">in/rathiabhinav01</span>
+        </a>
+      </li>
+    </ul>
+
+    <footer class="cmdk__footer">
+      <span><kbd class="kbd">↑</kbd> <kbd class="kbd">↓</kbd> navigate</span>
+      <span><kbd class="kbd">↵</kbd> select</span>
+      <span><kbd class="kbd">esc</kbd> close</span>
+    </footer>
+  </form>
+</dialog>
+
+<script>
+  // Mount once; safe to import everywhere because the dialog itself is a singleton.
+  (() => {
+    const dialog = document.getElementById("cmdk") as HTMLDialogElement | null;
+    const input = document.getElementById("cmdk-input") as HTMLInputElement | null;
+    if (!dialog || !input) return;
+
+    const items = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLAnchorElement | HTMLButtonElement>("[data-cmd]")
+      );
+
+    let activeIndex = 0;
+    const setActive = (i: number) => {
+      const list = items().filter((el) => !el.hidden);
+      if (list.length === 0) return;
+      activeIndex = (i + list.length) % list.length;
+      list.forEach((el, idx) => {
+        el.setAttribute("data-active", idx === activeIndex ? "true" : "false");
+      });
+      list[activeIndex]?.scrollIntoView({ block: "nearest" });
+    };
+
+    const open = () => {
+      if (dialog.open) return;
+      dialog.showModal();
+      input.value = "";
+      filterItems("");
+      setActive(0);
+      requestAnimationFrame(() => input.focus());
+    };
+
+    const close = () => {
+      if (!dialog.open) return;
+      dialog.close();
+    };
+
+    const filterItems = (q: string) => {
+      const norm = q.trim().toLowerCase();
+      items().forEach((el) => {
+        const txt = el.textContent?.toLowerCase() ?? "";
+        el.hidden = norm.length > 0 && !txt.includes(norm);
+      });
+      setActive(0);
+    };
+
+    input.addEventListener("input", () => filterItems(input.value));
+
+    input.addEventListener("keydown", (e) => {
+      const list = items().filter((el) => !el.hidden);
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActive(activeIndex + 1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActive(activeIndex - 1);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const target = list[activeIndex] as HTMLElement | undefined;
+        if (target?.dataset.cmdAction === "theme-cycle") {
+          document.dispatchEvent(new CustomEvent("theme:cycle"));
+        } else if (target?.dataset.cmdAction === "help-open") {
+          // Close the palette first so the help dialog can take focus.
+          close();
+          document.dispatchEvent(new CustomEvent("help:open"));
+          return;
+        } else {
+          target?.click();
+        }
+        close();
+      }
+    });
+
+    dialog.addEventListener("click", (e) => {
+      if (e.target === dialog) close();
+    });
+
+    // Triggers
+    document.querySelectorAll("[data-cmdk-trigger]").forEach((el) =>
+      el.addEventListener("click", (e) => {
+        e.preventDefault();
+        open();
+      })
+    );
+
+    // Global shortcuts
+    document.addEventListener("keydown", (e) => {
+      const isTyping =
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA" ||
+        (document.activeElement as HTMLElement | null)?.isContentEditable;
+
+      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        open();
+        return;
+      }
+      if (e.key === "/" && !isTyping) {
+        e.preventDefault();
+        open();
+        return;
+      }
+      if (e.key === "Escape" && dialog.open) {
+        close();
+        return;
+      }
+      if ((e.key === "r" || e.key === "R") && !isTyping && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        const url = dialog.dataset.resumeUrl ?? "Abhinav-Rathi.pdf";
+        const a = document.createElement("a");
+        a.href = url;
+        a.click();
+      }
+    });
+
+    // Theme-cycle command (palette click).
+    dialog.addEventListener("click", (e) => {
+      const t = e.target as HTMLElement | null;
+      const cmd = t?.closest<HTMLElement>("[data-cmd-action='theme-cycle']");
+      if (cmd) {
+        e.preventDefault();
+        document.dispatchEvent(new CustomEvent("theme:cycle"));
+        close();
+      }
+    });
+
+    // Help-open command (palette click).
+    dialog.addEventListener("click", (e) => {
+      const t = e.target as HTMLElement | null;
+      const cmd = t?.closest<HTMLElement>("[data-cmd-action='help-open']");
+      if (cmd) {
+        e.preventDefault();
+        close();
+        document.dispatchEvent(new CustomEvent("help:open"));
+      }
+    });
+  })();
+</script>
+
+<style>
+  .cmdk {
+    border: 1px solid var(--color-hairline-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-panel);
+    color: var(--color-body);
+    width: min(560px, 100% - 32px);
+    padding: 0;
+    box-shadow: 0 24px 60px -16px rgba(0, 0, 0, 0.6);
+  }
+  .cmdk::backdrop {
+    background: rgba(8, 8, 10, 0.6);
+    backdrop-filter: blur(6px);
+  }
+  .cmdk__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--color-hairline);
+  }
+  .cmdk__header input {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    outline: 0;
+    color: var(--color-body);
+    font-size: 15px;
+    font-family: var(--font-sans);
+  }
+  .cmdk__list {
+    list-style: none;
+    margin: 0;
+    padding: 8px 0;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .cmdk__group {
+    padding: 10px 16px 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-faint);
+  }
+  .cmdk__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 16px;
+    color: var(--color-body);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .cmdk__item[data-active="true"],
+  .cmdk__item:hover {
+    background: var(--color-hairline);
+    color: white;
+  }
+  .cmdk__hint {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--color-faint);
+  }
+  .cmdk__footer {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    border-top: 1px solid var(--color-hairline);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-faint);
+  }
+</style>
