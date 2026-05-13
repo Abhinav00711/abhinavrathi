@@ -1,0 +1,145 @@
+---
+title: "Backtest harness — turning model evaluation into a merge gate"
+summary: "Consolidated TKTK ad-hoc evaluation scripts into one walk-forward harness that runs on every model PR and gates merge on no-regression vs. the production baseline."
+role: "Owner · ML engineering"
+year: 2026
+tech: ["Python", "scikit-learn", "Pandas", "NumPy", "MySQL", "Docker"]
+cover: ../../assets/work/backtest-harness/cover.png
+anonymized: true
+metrics:
+  - { label: "ad-hoc eval scripts retired", value: "TKTK" }
+  - { label: "model PR turnaround", value: "TKTK" }
+  - { label: "regressions caught pre-merge", value: "TKTK" }
+  - { label: "harness runtime", value: "TKTK" }
+published: false
+featured: false
+order: 7
+---
+
+import Diagram from "@components/Diagram.astro";
+
+> **Outcome.** Replaced TKTK loose evaluation scripts with a single
+> walk-forward harness that ships next to the model code, runs on every
+> PR that touches a model, and refuses to merge regressions against the
+> production baseline. Eval became a pass/fail signal instead of a
+> conversation.
+
+## Context
+
+ML evaluation at a trading firm has a sharp edge most ML-tutorial
+content skips. A model isn't shipped because its test-set accuracy
+went up — it's shipped because its *out-of-sample* behavior on the
+specific windows the firm cares about doesn't get worse. "Worse"
+means different things to different stakeholders: a slightly lower
+hit rate that costs nothing, vs. a slightly higher hit rate that
+masks a drawdown nobody asked for. The eval has to be the place
+those disagreements are settled, not the deploy.
+
+Before the harness existed, the workflow was: model author writes a
+notebook, runs a metric on a slice, pastes the number in the PR
+description, a reviewer eyeballs it, merge or not. Three things
+broke that loop, and the harness was the cleanest fix to all three.
+
+## My role
+
+Owner. TKTK — describe scope: schema for the eval store, walk-forward
+runner, baseline-comparison layer, CI integration, runbook. Reviewed
+by TKTK; shipped solo behind a feature flag for one model family
+first, then expanded to the rest.
+
+## Approach
+
+The first version was a script. A second model came in and the
+script grew flags. A third came in and the flags grew flags. By
+the time a fourth model arrived I'd already learned the lesson:
+**the harness is a framework, not a script** — small, opinionated,
+configured by data not by code, and owned like infrastructure.
+
+I tried two designs before the one that landed.
+
+**First**, I tried the "notebook with parameter cells" pattern — a
+single template notebook that each model could override. It worked
+for two of them and broke on the third when the third model needed
+a different cross-validation shape. Notebooks don't compose; the
+fix would have been to copy-paste, which is exactly what the
+harness was supposed to replace.
+
+**Second**, I tried a config-driven script — YAML in, plot out.
+That landed and ran, but didn't gate anything. A PR could regress
+the production model and the YAML output would say so in a corner
+of the artifacts; nobody read it. The lesson was: a harness that
+doesn't *block* doesn't change behavior. The output has to be the
+merge gate, not a chart somebody might look at.
+
+The shape that actually worked was three things landing together:
+
+1. **Walk-forward evaluation, configured by data.** Each model
+   family declares its eval windows in a small YAML/JSON file
+   (start, end, train-vs-out-of-sample split, refit cadence). The
+   harness reads that and runs the model author's `fit` /
+   `predict` over each window in turn. No model-specific Python in
+   the harness.
+
+2. **Baseline comparison, persisted.** Every harness run writes its
+   metrics to a small MySQL table keyed by `(model_family, git_sha,
+   window_start)`. The CI step compares the candidate's row to the
+   row from the production-pinned SHA and computes a delta. The
+   gate is "the candidate's metrics are not worse on *any*
+   business-defined dimension by more than X". Specifics of X are
+   per-family and documented next to the YAML.
+
+3. **CI integration as a hard gate.** A GitHub Actions job runs the
+   harness on every PR that touches a model. The gate is required
+   for merge. A model PR with no eval delta is the same as a code
+   PR with no tests — that sentence is the whole point.
+
+The load-bearing piece is the *gate*, not the eval. The eval
+already existed in scattered form; the gate is what changed
+behavior. Once the gate was on, the conversation in PR reviews
+shifted from "is this model better" to "is the harness's
+definition of better the right one" — which is a much better
+conversation to be having, because it produces specific edits to
+the YAML rather than vague disagreement about model goodness.
+
+## Architecture
+
+<Diagram
+  slug="backtest-harness"
+  alt="A model PR triggers a CI job that loads the model family's eval YAML, runs walk-forward evaluation against historical windows pulled from MySQL, writes metrics to an eval-results table keyed by git SHA, compares to the production-pinned baseline, and emits a pass/fail status that gates the merge. The same harness can be invoked locally with the same inputs for debugging."
+  caption="The CI gate is the load-bearing piece. The same harness runs locally and in CI; only the gate makes it change behavior."
+/>
+
+## Results
+
+- Ad-hoc evaluation scripts consolidated: **TKTK** retired into one
+  harness.
+- Model PR turnaround (open → eval done): **TKTK** (previously
+  TKTK, by hand).
+- Regressions caught pre-merge (rolling TKTK-day window): **TKTK**.
+- Harness runtime per PR: **TKTK**.
+- Engineer-hours spent re-running eval after merge to confirm
+  no-regression: **eliminated** — the gate is the confirmation.
+
+*(All metrics in this case study are TKTK pending the user's
+confirmation; nothing is published until they land. Real numbers
+go where each TKTK is.)*
+
+## What I'd do differently
+
+Two things, in order.
+
+I'd have made the gate strict from day one instead of warning-only
+for the first month. Warning-only gates train the team to ignore
+them; the gate has to bite before anyone takes it seriously. The
+political cost of "your PR is blocked by the harness" was lower
+than I feared, and the cost of *not* having a strict gate was
+exactly the kind of slow-regression incident the harness was
+supposed to prevent.
+
+I'd have written the per-family YAML on the model author's side
+from the start, not the platform side. Owning the eval config from
+the platform feels like helpful infrastructure work; in practice
+it makes the model author less invested in the result. The right
+shape is "the model family owns its eval contract, the harness owns
+the execution and the gate" — and I'd ship that from day one rather
+than refactor toward it later.

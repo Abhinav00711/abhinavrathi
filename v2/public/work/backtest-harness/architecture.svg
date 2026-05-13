@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" role="img" aria-label="Backtest harness architecture: a model PR triggers a CI job that loads the eval YAML config, runs walk-forward evaluation over historical windows from MySQL, persists metrics keyed by git SHA, compares against the production-pinned baseline, and emits a pass/fail status that gates the merge. The same harness runs locally with the same inputs.">
+  <title>Backtest harness — architecture</title>
+  <desc>A model PR opens on GitHub. CI loads the model family's eval YAML (windows, refit cadence, gate thresholds) and invokes the walk-forward runner, which pulls historical inputs from MySQL and runs the candidate model's fit/predict against each window. Metrics are written to an eval-results table keyed by (model_family, git_sha, window_start). The CI step compares the candidate row against the production-pinned SHA and emits a pass/fail status. The merge gate is required. The same harness binary is invocable locally for debugging with the same YAML, the same MySQL, and the same comparison logic.</desc>
+
+  <defs>
+    <style>
+      .surface { fill: #0a0a0a; }
+      .panel   { fill: #141416; }
+      .stroke  { stroke: #2a2a2d; stroke-width: 1; }
+      .strokeFaint { stroke: #1f1f22; stroke-width: 1; }
+      .accent  { stroke: #3d52fe; stroke-width: 1.5; fill: none; }
+      .accentFill { fill: #3d52fe; }
+      .label   { fill: #e6e6e8; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13px; }
+      .sub     { fill: #9a9aa2; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.04em; }
+      .eyebrow { fill: #6c6c74; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+      .head    { fill: #ffffff; font-family: 'Inter', system-ui, sans-serif; font-size: 14px; font-weight: 600; }
+    </style>
+    <marker id="arrowR" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d52fe"/>
+    </marker>
+    <marker id="arrowD" viewBox="0 0 10 10" refX="5" refY="9" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3d52fe"/>
+    </marker>
+  </defs>
+
+  <rect class="surface" width="1200" height="520"/>
+
+  <!-- title row -->
+  <text x="32" y="38" class="eyebrow">BACKTEST-HARNESS · ARCHITECTURE</text>
+  <text x="32" y="62" class="head">Walk-forward eval as a merge gate, owned by the model family.</text>
+
+  <!-- LEFT: model PR -->
+  <g transform="translate(32,110)">
+    <rect class="panel stroke" width="200" height="100" rx="10"/>
+    <text x="16" y="28" class="sub">GITHUB</text>
+    <text x="16" y="52" class="head">Model PR</text>
+    <text x="16" y="72" class="label">touches src/models/&lt;family&gt;</text>
+    <text x="16" y="88" class="label" style="fill:#9a9aa2">git_sha = candidate</text>
+  </g>
+
+  <!-- arrow PR → CI -->
+  <line class="accent" x1="232" y1="160" x2="304" y2="160" marker-end="url(#arrowR)"/>
+
+  <!-- CI job -->
+  <g transform="translate(304,110)">
+    <rect class="panel stroke" width="220" height="100" rx="10"/>
+    <text x="16" y="28" class="sub">GITHUB ACTIONS</text>
+    <text x="16" y="52" class="head">CI eval job</text>
+    <text x="16" y="72" class="label">required for merge</text>
+    <text x="16" y="88" class="label" style="fill:#9a9aa2">runs harness binary</text>
+  </g>
+
+  <!-- arrow CI → harness -->
+  <line class="accent" x1="524" y1="160" x2="596" y2="160" marker-end="url(#arrowR)"/>
+
+  <!-- Walk-forward runner (central) -->
+  <g transform="translate(596,80)">
+    <rect class="panel stroke" width="280" height="160" rx="10"/>
+    <text x="16" y="28" class="sub">PYTHON · SCIKIT-LEARN</text>
+    <text x="16" y="52" class="head">Walk-forward runner</text>
+    <text x="16" y="76" class="label">windows from eval.yaml</text>
+    <text x="16" y="94" class="label">model.fit() / predict() per window</text>
+    <text x="16" y="120" class="sub" style="fill:#3d52fe">CONFIGURED BY DATA</text>
+    <text x="16" y="138" class="label">no model-specific Python in harness</text>
+  </g>
+
+  <!-- arrow runner → results -->
+  <line class="accent" x1="876" y1="160" x2="948" y2="160" marker-end="url(#arrowR)"/>
+
+  <!-- Eval results table -->
+  <g transform="translate(948,110)">
+    <rect class="panel stroke" width="220" height="100" rx="10"/>
+    <text x="16" y="28" class="sub">MYSQL</text>
+    <text x="16" y="52" class="head">eval_results</text>
+    <text x="16" y="72" class="label">key: (family, git_sha,</text>
+    <text x="16" y="88" class="label">       window_start)</text>
+  </g>
+
+  <!-- eval.yaml feeding into runner from above -->
+  <g transform="translate(596,8)">
+    <rect class="panel strokeFaint" width="280" height="46" rx="8"/>
+    <text x="16" y="20" class="sub">REPO · OWNED BY MODEL FAMILY</text>
+    <text x="16" y="38" class="label">eval.yaml — windows · split · refit · gate</text>
+  </g>
+  <line class="accent" x1="736" y1="54" x2="736" y2="80" marker-end="url(#arrowD)"/>
+
+  <!-- MySQL historical input feeding runner from below-left -->
+  <g transform="translate(304,260)">
+    <rect class="panel stroke" width="220" height="90" rx="10"/>
+    <text x="16" y="28" class="sub">MYSQL</text>
+    <text x="16" y="52" class="head">Historical inputs</text>
+    <text x="16" y="74" class="label">per-window slices</text>
+  </g>
+  <line class="accent" x1="524" y1="305" x2="596" y2="240" marker-end="url(#arrowR)"/>
+
+  <!-- Baseline compare row -->
+  <g transform="translate(440,380)">
+    <rect class="panel stroke" width="280" height="90" rx="10"/>
+    <text x="16" y="28" class="sub">HARNESS · COMPARE</text>
+    <text x="16" y="52" class="head">Baseline diff</text>
+    <text x="16" y="74" class="label">candidate vs production SHA</text>
+  </g>
+
+  <!-- arrows: results → compare, compare → gate -->
+  <line class="accent" x1="1058" y1="210" x2="1058" y2="425" marker-end="url(#arrowD)"/>
+  <line class="accent" x1="1058" y1="425" x2="720" y2="425" marker-end="url(#arrowR)"/>
+
+  <!-- pass/fail gate -->
+  <g transform="translate(180,380)">
+    <rect class="panel stroke" width="240" height="90" rx="10"/>
+    <text x="16" y="28" class="sub">MERGE GATE</text>
+    <text x="16" y="52" class="head">pass · fail</text>
+    <text x="16" y="74" class="label">required check on the PR</text>
+  </g>
+  <line class="accent" x1="440" y1="425" x2="420" y2="425" marker-end="url(#arrowR)"/>
+
+  <!-- gate feeds back into the PR (loop) -->
+  <line class="accent" x1="300" y1="380" x2="200" y2="220" marker-end="url(#arrowR)" stroke-dasharray="4 4"/>
+
+  <!-- footer note -->
+  <g transform="translate(32,486)">
+    <rect class="panel strokeFaint" width="1136" height="34" rx="8"/>
+    <circle cx="20" cy="17" r="3" class="accentFill"/>
+    <text x="36" y="22" class="label" style="fill:#9a9aa2">same binary runs locally · same yaml · same baseline diff · the gate is the load-bearing piece</text>
+  </g>
+</svg>

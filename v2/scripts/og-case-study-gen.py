@@ -230,7 +230,7 @@ def render_og(slug: str, fm: dict) -> Image.Image:
     d.text((80, H - 105), "Abhinav Rathi", fill=WHITE, font=f_footer)
     d.text(
         (80, H - 105 + 30),
-        "Full-Stack Engineer · Axxela",
+        "ML Engineer · Axxela (prop trading)",
         fill=MUTED,
         font=f_footer_r,
     )

@@ -52,8 +52,10 @@ Deploys statically to GitHub Pages at `https://abhinav00711.github.io/abhinavrat
 - **Real assets** — `public/Abhinav-Rathi.pdf` (no space) and the avatar at
   `src/assets/people/abhinav.jpg` (Astro Image processes it into AVIF + WebP at
   build; the duplicate `public/abhinav.jpg` was retired on 2026-05-12).
-- **Axxela title** — Experience entry now reads "Full-Stack Engineer" to match the
-  locked positioning sentence (was "Associate - Development & Operations").
+- **Axxela title** — Experience entry briefly read "Full-Stack Engineer" to match
+  the original positioning; reverted on 2026-05-12 to the literal company title
+  "Associate — Development & Operations" as part of the ML-foreground pivot. See
+  the 2026-05-12 entry below.
 
 ### Added 2026-05-12 (Phase A.1 — ML-foreground pivot)
 
