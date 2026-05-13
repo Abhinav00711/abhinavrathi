@@ -43,10 +43,18 @@ const metrics: Array<{ k: string; v: string }> = [
   <div class="container-prose relative z-10">
     <p class="eyebrow reveal">{eyebrow}</p>
 
-    <h1 class="headline reveal mt-6 max-w-[16ch]" style="--reveal-delay: 80ms;">
-      <span class="block">{headlineLineOne}</span>
-      <span class="mt-2 block text-muted-display">{headlineLineTwo}</span>
+    <h1
+      class="headline reveal mt-6 max-w-[16ch]"
+      style="--reveal-delay: 80ms;"
+      data-typer
+    >
+      <span class="block" data-typer-line>{headlineLineOne}</span>
+      <span class="mt-2 block text-muted-display" data-typer-line>{headlineLineTwo}</span>
     </h1>
+
+    <!-- Scan-line for the first-visit terminal intro. Only animates while the
+         hero has `.intro-active`. Gated everywhere by prefers-reduced-motion. -->
+    <div aria-hidden="true" class="hero-scanline" data-hero-scanline></div>
 
     <p class="reveal mt-8 max-w-prose text-[17px] text-muted" style="--reveal-delay: 160ms;">
       I do applied ML at a place where the model's output becomes a real
@@ -93,6 +101,167 @@ const metrics: Array<{ k: string; v: string }> = [
     </div>
   </div>
 </section>
+
+<script>
+  /**
+   * First-visit terminal intro for the hero.
+   *
+   *   1. A cobalt scan-line sweeps once across the hero (~900ms).
+   *   2. The headline types itself character-by-character with a cursor that
+   *      hops between the two lines.
+   *   3. Cursor blinks for one cycle on the final line, then fades.
+   *
+   * Fires once per browser (stored in `localStorage["hero-intro-seen"]`).
+   * Bypass paths:
+   *   - URL `?intro` (for sharing / demoing the intro)
+   *   - `hero:replay-intro` CustomEvent (wired to the Cmd-K palette)
+   * Bails entirely under `prefers-reduced-motion`.
+   * Skippable by any keydown / pointerdown while the intro is running.
+   */
+  (() => {
+    const hero = document.querySelector<HTMLElement>("[data-hero]");
+    const headline = hero?.querySelector<HTMLElement>("[data-typer]");
+    if (!hero || !headline) return;
+
+    const FLAG_KEY = "hero-intro-seen";
+    const reduceMotion = () =>
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const forceReplay = new URLSearchParams(window.location.search).has("intro");
+
+    const lines = Array.from(
+      headline.querySelectorAll<HTMLElement>("[data-typer-line]")
+    );
+    // Cache the source-of-truth text — frontmatter strings, untouched.
+    const originals = lines.map((el) => el.textContent ?? "");
+
+    let running = false;
+    let skipHandler: ((e: Event) => void) | null = null;
+
+    const sleep = (ms: number) =>
+      new Promise<void>((res) => setTimeout(res, ms));
+
+    const detachSkip = () => {
+      if (!skipHandler) return;
+      window.removeEventListener("keydown", skipHandler);
+      window.removeEventListener("pointerdown", skipHandler);
+      skipHandler = null;
+    };
+
+    const finish = () => {
+      running = false;
+      detachSkip();
+      lines.forEach((el, i) => {
+        el.textContent = originals[i];
+        el.classList.remove("has-cursor");
+      });
+      headline.classList.remove("is-typing");
+      hero.classList.remove("intro-active");
+      headline.removeAttribute("aria-busy");
+      try {
+        localStorage.setItem(FLAG_KEY, "1");
+      } catch {
+        /* private mode etc. — just skip persistence */
+      }
+    };
+
+    const playIntro = async () => {
+      if (running) return;
+      if (reduceMotion()) {
+        finish();
+        return;
+      }
+      running = true;
+
+      // Keep the surrounding reveals in their normal stagger; just take over
+      // the headline. Force it visible so the reveal observer's opacity:0
+      // never beats us to the paint.
+      lines.forEach((el) => {
+        el.textContent = "";
+      });
+      headline.classList.add("is-visible", "is-typing");
+      headline.style.setProperty("--reveal-delay", "0ms");
+      headline.setAttribute("aria-busy", "true");
+      hero.classList.add("intro-active");
+
+      // Any meaningful keydown or pointerdown skips to the final state.
+      // We keep the listener attached for the whole intro so a modifier-only
+      // press (Shift/Alt) doesn't quietly consume the user's only skip chance.
+      skipHandler = (e: Event) => {
+        if (!running) return;
+        if (e instanceof KeyboardEvent) {
+          // Let Cmd+K still open the palette without skipping the intro.
+          if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+            return;
+          }
+          // Ignore modifier-only presses with no key (Shift/Ctrl/Alt alone).
+          if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") {
+            return;
+          }
+        }
+        finish();
+      };
+      window.addEventListener("keydown", skipHandler);
+      window.addEventListener("pointerdown", skipHandler);
+
+      // Brief preamble so the scan-line has time to start sweeping before
+      // the first character lands.
+      await sleep(180);
+      if (!running) return;
+
+      const typeLine = async (
+        el: HTMLElement,
+        text: string,
+        msPerChar: number
+      ) => {
+        el.classList.add("has-cursor");
+        for (let i = 1; i <= text.length; i++) {
+          if (!running) return;
+          el.textContent = text.slice(0, i);
+          await sleep(msPerChar);
+        }
+      };
+
+      // Line 1: ~38 chars at 18ms/char ≈ 680ms — feels like fast deliberate typing.
+      await typeLine(lines[0], originals[0], 18);
+      if (!running) return;
+      lines[0].classList.remove("has-cursor");
+      await sleep(100);
+      if (!running) return;
+
+      // Line 2: ~94 chars at 7ms/char ≈ 660ms — keeps cadence flowing.
+      await typeLine(lines[1], originals[1], 7);
+      if (!running) return;
+
+      // Final cursor blink on line 2, then fade. Total intro ~2.1s.
+      await sleep(620);
+      if (running) finish();
+    };
+
+    const seen = (() => {
+      try {
+        return localStorage.getItem(FLAG_KEY) === "1";
+      } catch {
+        return false;
+      }
+    })();
+
+    if (!seen || forceReplay) {
+      // Wait two frames so the reveal observer and other layout settle.
+      requestAnimationFrame(() => requestAnimationFrame(playIntro));
+    }
+
+    // External replay (Cmd-K → Replay intro).
+    document.addEventListener("hero:replay-intro", () => {
+      try {
+        localStorage.removeItem(FLAG_KEY);
+      } catch {
+        /* ignore */
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      playIntro();
+    });
+  })();
+</script>
 
 <script>
   // Cursor-follow spotlight on hero. Listener attached to the section itself so

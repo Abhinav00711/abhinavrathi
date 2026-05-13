@@ -5,13 +5,29 @@ import Section from "./Section.astro";
  * Roles — single-column, hairline-rule timeline.
  * Each role leads with ONE quantified outcome bullet (per plan §4 / §10).
  *
+ * `start` / `end` are Date objects so the horizontal career track above can
+ * compute segment widths proportional to duration. `end: null` means ongoing.
  */
-const roles = [
+type Role = {
+  company: string;
+  role: string;
+  location: string;
+  dates: string;
+  start: Date;
+  end: Date | null;
+  current?: boolean;
+  bullets: string[];
+  tech: string[];
+};
+
+const roles: Role[] = [
   {
     company: "Axxela",
     role: "Associate — Development & Operations",
     location: "Kolkata, IN",
     dates: "Sep 2025 — Present",
+    start: new Date(2025, 8, 1),
+    end: null,
     current: true,
     bullets: [
       "Cut nightly position-reconciliation runtime from 38 min to 4 min; eliminated ~1 hr/day of next-morning manual cleanup by making the job idempotent before making it fast.",
@@ -25,6 +41,8 @@ const roles = [
     role: "Senior ML Engineer",
     location: "Gurugram, IN",
     dates: "Jun 2024 — Aug 2025",
+    start: new Date(2024, 5, 1),
+    end: new Date(2025, 7, 31),
     bullets: [
       "Led ML projects across NLP and computer vision; took models from notebook to deployed service.",
       "Designed evaluation harnesses so model regressions surfaced before they hit users.",
@@ -36,6 +54,8 @@ const roles = [
     role: "Application Developer Intern",
     location: "Bengaluru, IN",
     dates: "Jan 2024 — May 2024",
+    start: new Date(2024, 0, 1),
+    end: new Date(2024, 4, 31),
     bullets: [
       "Built internal tooling for a global investment bank — first taste of code that runs against real money.",
     ],
@@ -46,6 +66,8 @@ const roles = [
     role: "Android Developer Intern",
     location: "Kolkata, IN",
     dates: "Dec 2021 — Apr 2022",
+    start: new Date(2021, 11, 1),
+    end: new Date(2022, 3, 30),
     bullets: [
       "Shipped consumer-facing mobile features in production; learned the full release loop.",
     ],
@@ -56,12 +78,53 @@ const roles = [
     role: "Android Developer Intern",
     location: "Remote, IN",
     dates: "Feb 2021 — Apr 2021",
+    start: new Date(2021, 1, 1),
+    end: new Date(2021, 3, 30),
     bullets: [
       "First production codebase — wired up custom APIs against MongoDB, integrated Crashlytics, and learned to read a stack trace under deadline.",
     ],
     tech: ["Java", "Android Studio", "MongoDB", "Firebase"],
   },
 ];
+
+/* --------- career-track geometry (computed at build time) --------- */
+const now = new Date();
+const earliest = roles
+  .map((r) => r.start.getTime())
+  .reduce((a, b) => Math.min(a, b), Infinity);
+const latest = now.getTime();
+const totalMs = latest - earliest;
+
+const pct = (t: number) => ((t - earliest) / totalMs) * 100;
+
+const segments = roles.map((r) => {
+  const startMs = r.start.getTime();
+  const endMs = (r.end ?? now).getTime();
+  return {
+    company: r.company,
+    dates: r.dates,
+    current: !!r.current,
+    leftPct: pct(startMs),
+    widthPct: ((endMs - startMs) / totalMs) * 100,
+  };
+});
+
+// Year ticks (Jan 1 of each year between earliest and now).
+const years: Array<{ y: number; leftPct: number }> = [];
+const startYear = new Date(earliest).getFullYear();
+const endYear = new Date(latest).getFullYear();
+for (let y = startYear; y <= endYear; y++) {
+  const t = new Date(y, 0, 1).getTime();
+  if (t >= earliest && t <= latest) {
+    years.push({ y, leftPct: pct(t) });
+  }
+}
+
+const currentSegmentIdx = segments.findIndex((s) => s.current);
+const initialLabelCompany =
+  currentSegmentIdx >= 0 ? segments[currentSegmentIdx].company : segments[0].company;
+const initialLabelDates =
+  currentSegmentIdx >= 0 ? segments[currentSegmentIdx].dates : segments[0].dates;
 ---
 
 <Section
@@ -69,10 +132,65 @@ const roles = [
   eyebrow="Experience"
   title="Five years of shipping in production."
 >
+  <!-- Horizontal career track — hairline timeline with year ticks and
+       role segments sized proportionally to duration. Hover/focus a segment
+       to update the label and highlight the matching role card below.
+       Hidden under 720px (the vertical list carries the same content). -->
+  <div class="career-track" data-career-track>
+    <div
+      class="career-track-label"
+      data-track-label
+      data-current="true"
+      aria-live="polite"
+    >
+      <span class="career-track-label-company" data-track-label-company>
+        {initialLabelCompany}
+      </span>
+      <span class="career-track-label-dates" data-track-label-dates>
+        {initialLabelDates}
+      </span>
+    </div>
+
+    <div class="career-track-line" aria-hidden="true"></div>
+
+    <div class="career-track-ticks" aria-hidden="true">
+      {
+        years.map((yr) => (
+          <span class="career-tick" style={`left: ${yr.leftPct}%`}>
+            <span class="career-tick-line" />
+            <span class="career-tick-label">{yr.y}</span>
+          </span>
+        ))
+      }
+    </div>
+
+    <div class="career-track-segments" role="tablist" aria-label="Roles by year">
+      {
+        segments.map((s, i) => (
+          <button
+            type="button"
+            role="tab"
+            class={`career-segment ${s.current ? "is-current" : ""}`}
+            data-role-idx={i}
+            data-company={s.company}
+            data-dates={s.dates}
+            data-current={s.current ? "true" : "false"}
+            style={`left: ${s.leftPct}%; width: ${s.widthPct}%`}
+            aria-label={`${s.company} · ${s.dates}`}
+          />
+        ))
+      }
+    </div>
+  </div>
+
   <ol class="relative ml-3" style="border-left: 1px solid var(--color-hairline);">
     {
-      roles.map((r) => (
-        <li class="reveal relative pl-8 pb-12 last:pb-0">
+      roles.map((r, idx) => (
+        <li
+          class="reveal relative pl-8 pb-12 last:pb-0"
+          data-role-card
+          id={`role-${idx}`}
+        >
           <span
             class="absolute -left-[5px] top-2 inline-block h-[10px] w-[10px] rounded-full"
             style={`background: ${r.current ? "var(--color-accent)" : "var(--color-hairline-strong)"}; box-shadow: ${r.current ? "0 0 0 4px var(--color-accent-glow)" : "none"};`}
@@ -117,3 +235,103 @@ const roles = [
     }
   </ol>
 </Section>
+
+<script>
+  /**
+   * Career-track interaction.
+   * - Hover/focus a segment → update the floating label + highlight the matching
+   *   role card below. Restore to the current role on mouseleave/blur.
+   * - Click → smooth-scroll to the role card; brief highlight pulse to confirm.
+   * - Reduced-motion users still get the click navigation, just no smooth scroll.
+   */
+  (() => {
+    const track = document.querySelector<HTMLElement>("[data-career-track]");
+    if (!track) return;
+
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const segments = Array.from(
+      track.querySelectorAll<HTMLButtonElement>(".career-segment")
+    );
+    const labelEl = track.querySelector<HTMLElement>("[data-track-label]");
+    const labelCompany = track.querySelector<HTMLElement>(
+      "[data-track-label-company]"
+    );
+    const labelDates = track.querySelector<HTMLElement>(
+      "[data-track-label-dates]"
+    );
+    const roleCards = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-role-card]")
+    );
+
+    if (!labelEl || !labelCompany || !labelDates || roleCards.length === 0) return;
+
+    const currentIdx = segments.findIndex(
+      (s) => s.dataset.current === "true"
+    );
+    const safeIdx = currentIdx >= 0 ? currentIdx : 0;
+
+    const setLabel = (company: string, dates: string, isCurrent: boolean) => {
+      labelCompany.textContent = company;
+      labelDates.textContent = dates;
+      labelEl.setAttribute("data-current", isCurrent ? "true" : "false");
+    };
+
+    const clearLabel = () => {
+      const fallback = segments[safeIdx];
+      if (!fallback) return;
+      setLabel(
+        fallback.dataset.company ?? "",
+        fallback.dataset.dates ?? "",
+        true
+      );
+    };
+
+    const highlightCard = (idx: number, on: boolean) => {
+      const card = roleCards[idx];
+      if (!card) return;
+      card.classList.toggle("is-hovered-via-track", on);
+    };
+
+    segments.forEach((seg) => {
+      const idx = Number(seg.dataset.roleIdx);
+
+      seg.addEventListener("mouseenter", () => {
+        setLabel(
+          seg.dataset.company ?? "",
+          seg.dataset.dates ?? "",
+          seg.dataset.current === "true"
+        );
+        highlightCard(idx, true);
+      });
+      seg.addEventListener("focus", () => {
+        setLabel(
+          seg.dataset.company ?? "",
+          seg.dataset.dates ?? "",
+          seg.dataset.current === "true"
+        );
+        highlightCard(idx, true);
+      });
+      seg.addEventListener("mouseleave", () => {
+        highlightCard(idx, false);
+        clearLabel();
+      });
+      seg.addEventListener("blur", () => {
+        highlightCard(idx, false);
+        clearLabel();
+      });
+
+      seg.addEventListener("click", () => {
+        const card = roleCards[idx];
+        if (!card) return;
+        card.scrollIntoView({
+          behavior: reduce ? "auto" : "smooth",
+          block: "center",
+        });
+        card.classList.add("is-scrolled-to");
+        window.setTimeout(() => {
+          card.classList.remove("is-scrolled-to");
+        }, 1400);
+      });
+    });
+  })();
+</script>

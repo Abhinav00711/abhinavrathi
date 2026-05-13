@@ -74,6 +74,12 @@ const resumeUrl = `${base}/Abhinav-Rathi.pdf`;
           <span class="cmdk__hint kbd-row"><kbd class="kbd">?</kbd></span>
         </button>
       </li>
+      <li>
+        <button class="cmdk__item" data-cmd type="button" data-cmd-action="hero-replay-intro">
+          <span>Replay intro</span>
+          <span class="cmdk__hint">first-visit typewriter</span>
+        </button>
+      </li>
 
       <li class="cmdk__group">Navigate</li>
       <li>
@@ -214,6 +220,10 @@ const resumeUrl = `${base}/Abhinav-Rathi.pdf`;
           close();
           document.dispatchEvent(new CustomEvent("help:open"));
           return;
+        } else if (target?.dataset.cmdAction === "hero-replay-intro") {
+          close();
+          document.dispatchEvent(new CustomEvent("hero:replay-intro"));
+          return;
         } else {
           target?.click();
         }
@@ -287,6 +297,17 @@ const resumeUrl = `${base}/Abhinav-Rathi.pdf`;
         e.preventDefault();
         close();
         document.dispatchEvent(new CustomEvent("help:open"));
+      }
+    });
+
+    // Replay-intro command (palette click).
+    dialog.addEventListener("click", (e) => {
+      const t = e.target as HTMLElement | null;
+      const cmd = t?.closest<HTMLElement>("[data-cmd-action='hero-replay-intro']");
+      if (cmd) {
+        e.preventDefault();
+        close();
+        document.dispatchEvent(new CustomEvent("hero:replay-intro"));
       }
     });
   })();

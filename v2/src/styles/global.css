@@ -341,6 +341,301 @@ kbd,
 }
 
 /* ---------------------------------------------------------------------------
+ * Terminal-aesthetic motion — shared by the hero intro and the stack reveal.
+ *
+ * - Cobalt scan-line that sweeps across the hero on first visit.
+ * - Blinking cursor used on the headline mid-type and on the stack prompt.
+ *
+ * Every effect bails on prefers-reduced-motion via the global rule above.
+ * --------------------------------------------------------------------------*/
+
+/* Scan-line — only animates while [data-hero] has `.intro-active`. */
+.hero-scanline {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 1;
+  opacity: 0;
+}
+[data-hero].intro-active .hero-scanline {
+  opacity: 1;
+}
+.hero-scanline::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -2px;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--color-accent) 30%,
+    var(--color-accent) 70%,
+    transparent 100%
+  );
+  box-shadow: 0 0 24px 4px var(--color-accent-glow);
+  transform: translateY(0);
+  opacity: 0;
+}
+[data-hero].intro-active .hero-scanline::before {
+  animation: heroScanLine 1100ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+@keyframes heroScanLine {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  16% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    /* 100vh is always ≥ hero height on first paint, so this reliably
+       sweeps from top to past the bottom regardless of viewport size. */
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+/* Blinking cursor at end of the currently-typing headline line. */
+.headline.is-typing [data-typer-line] {
+  min-height: 1.1em; /* prevent reflow when the line is briefly empty */
+}
+.headline [data-typer-line].has-cursor::after {
+  content: "▍";
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--color-accent);
+  font-weight: 400;
+  vertical-align: baseline;
+  animation: cursorBlink 880ms steps(2, end) infinite;
+}
+@keyframes cursorBlink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-hero].intro-active .hero-scanline::before {
+    animation: none;
+    opacity: 0;
+  }
+  .headline [data-typer-line].has-cursor::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Career track — horizontal time-aware visualization above the Experience list.
+ * Hidden on narrow viewports; the vertical list below carries the same content.
+ * --------------------------------------------------------------------------*/
+.career-track {
+  position: relative;
+  height: 96px;
+  margin-bottom: 40px;
+  padding: 0;
+  user-select: none;
+}
+@media (max-width: 720px) {
+  .career-track {
+    display: none;
+  }
+}
+.career-track-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  transition: color 200ms ease;
+}
+.career-track-label[data-current="true"] .career-track-label-company {
+  color: var(--color-accent-text);
+}
+.career-track-label-company {
+  color: var(--color-body);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.career-track-label-dates {
+  color: var(--color-faint);
+}
+.career-track-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 56px;
+  height: 1px;
+  background: var(--color-hairline);
+}
+.career-track-ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 56px;
+  height: 32px;
+  pointer-events: none;
+}
+.career-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.career-tick-line {
+  width: 1px;
+  height: 6px;
+  background: var(--color-hairline-strong);
+}
+.career-tick-label {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-faint);
+  letter-spacing: 0.05em;
+}
+.career-track-segments {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 48px;
+  height: 18px;
+}
+.career-segment {
+  position: absolute;
+  top: 5px;
+  height: 8px;
+  background: var(--color-hairline-strong);
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0;
+  transition: background 180ms ease, height 180ms ease, top 180ms ease,
+    box-shadow 180ms ease, filter 180ms ease;
+  font-family: var(--font-mono);
+  font-size: 0; /* hide any text content; we keep label external */
+  min-width: 4px;
+}
+.career-segment.is-current {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-glow);
+}
+.career-segment:hover,
+.career-segment:focus-visible {
+  top: 2px;
+  height: 14px;
+  outline: none;
+}
+.career-segment:hover {
+  background: var(--color-accent-text);
+}
+.career-segment.is-current:hover {
+  background: var(--color-accent);
+  filter: brightness(1.15);
+}
+.career-segment:focus-visible {
+  background: var(--color-accent-text);
+  box-shadow: 0 0 0 2px var(--color-accent), 0 0 0 4px var(--color-accent-glow);
+}
+
+/* Role-card highlight when navigated via the track. */
+[data-role-card] {
+  border-radius: 8px;
+  transition: background-color 280ms ease;
+}
+[data-role-card].is-hovered-via-track {
+  background-color: color-mix(in srgb, var(--color-accent) 4%, transparent);
+}
+[data-role-card].is-scrolled-to {
+  background-color: color-mix(in srgb, var(--color-accent) 9%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .career-segment,
+  [data-role-card] {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Stack — terminal-prompt header + staggered chip reveal.
+ * Each cluster types its chips in left-to-right on intersect.
+ * --------------------------------------------------------------------------*/
+.stack-cluster .stack-prompt {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: var(--color-accent-text);
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  flex-wrap: wrap;
+}
+.stack-cluster .stack-prompt-sigil {
+  color: var(--color-faint);
+  margin-right: 8px;
+}
+.stack-cluster .stack-prompt-cmd {
+  color: var(--color-accent-text);
+}
+.stack-cluster .stack-prompt-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 0.95em;
+  margin-left: 4px;
+  background: var(--color-accent);
+  vertical-align: baseline;
+  animation: cursorBlink 880ms steps(2, end) infinite;
+}
+.stack-cluster.is-typed .stack-prompt-cursor {
+  opacity: 0;
+  transition: opacity 320ms ease 240ms;
+}
+.stack-cluster .stack-hint {
+  margin: 4px 0 18px 0;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.stack-cluster .chip {
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 200ms ease, transform 200ms ease,
+    border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+.stack-cluster .chip.is-typed {
+  opacity: 1;
+  transform: translateY(0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .stack-cluster .chip {
+    opacity: 1;
+    transform: none;
+  }
+  .stack-cluster .stack-prompt-cursor {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * Cross-document View Transitions — progressive enhancement.
  * Browsers that support `@view-transition: { navigation: auto }` (Chrome 126+,
  * Safari 18.2+) get a soft cross-fade between same-origin pages and a
