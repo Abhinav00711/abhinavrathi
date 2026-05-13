@@ -245,6 +245,11 @@ const resumeUrl = `${base}/Abhinav-Rathi.pdf`;
         open();
         return;
       }
+      if ((e.key === "k" || e.key === "K") && !isTyping && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        open();
+        return;
+      }
       if (e.key === "/" && !isTyping) {
         e.preventDefault();
         open();

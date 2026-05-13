@@ -121,7 +121,7 @@ export async function handler(
   const resend = new Resend(env.RESEND_API_KEY);
   const subject = `Contact form — ${name}`;
   const html = `
-    <h2>New contact via abhinavrathi.com</h2>
+    <h2>New contact via abhinav00711.github.io/abhinavrathi</h2>
     <p><strong>From:</strong> ${htmlEscape(name)} &lt;${htmlEscape(email)}&gt;</p>
     <pre style="white-space: pre-wrap; font: 14px/1.5 ui-monospace, monospace;">${htmlEscape(
       message
