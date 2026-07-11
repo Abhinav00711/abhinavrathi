@@ -636,6 +636,67 @@ kbd,
 }
 
 /* ---------------------------------------------------------------------------
+ * 3D motion layer — tilt cards, magnetic buttons, scroll-driven depth.
+ *
+ * JS behaviors live in MotionFX.astro ([data-tilt] / [data-magnetic]) and the
+ * WebGL hero in Hero3D.astro. Everything here is either a resting state or a
+ * progressive enhancement behind @supports; reduced-motion gets none of it
+ * (scripts bail + the global reduced-motion rule zeroes what's left).
+ * --------------------------------------------------------------------------*/
+[data-tilt] {
+  transform-style: preserve-3d;
+}
+/* While the rAF loop steers `transform`, drop it from the transition list so
+ * the element tracks the cursor 1:1 instead of smearing behind it. Everything
+ * else (border, glare opacity, colors) keeps transitioning. */
+[data-tilt].tilting,
+[data-magnetic].magnetizing {
+  will-change: transform;
+  transition-property: border-color, background, color, box-shadow, opacity;
+}
+
+/* Hero content parallax — copy drifts slower than the page and fades as you
+ * scroll into the work section, giving the hero real depth against the WebGL
+ * surface behind it (which fades on its own, driven by hero3d.ts). */
+@supports (animation-timeline: scroll()) {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-hero] .container-prose {
+      animation: heroDrift linear both;
+      animation-timeline: scroll(root block);
+      animation-range: 0 120vh;
+    }
+  }
+}
+@keyframes heroDrift {
+  to {
+    transform: translateY(88px);
+    opacity: 0;
+  }
+}
+
+/* Work tiles rise and un-tilt in 3D as they scroll into view. Applied to the
+ * inner article (.depth-card) so it composes with the anchor's .reveal fade
+ * and never fights the JS tilt transform on the anchor itself. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .depth-card {
+      animation: cardEnter cubic-bezier(0.2, 0.7, 0.2, 1) both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 90%;
+      transform-origin: 50% 90%;
+    }
+  }
+}
+@keyframes cardEnter {
+  from {
+    transform: perspective(900px) rotateX(12deg) translateY(20px);
+  }
+  to {
+    transform: perspective(900px) rotateX(0deg) translateY(0);
+  }
+}
+
+/* ---------------------------------------------------------------------------
  * Cross-document View Transitions — progressive enhancement.
  * Browsers that support `@view-transition: { navigation: auto }` (Chrome 126+,
  * Safari 18.2+) get a soft cross-fade between same-origin pages and a

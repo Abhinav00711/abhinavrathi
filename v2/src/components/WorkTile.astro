@@ -21,8 +21,8 @@ const { href, eyebrow, title, summary, tech, metric, slug, cover } = Astro.props
 const transitionName = `case-${slug}`;
 ---
 
-<a href={href} class="tile group reveal block">
-  <article class="flex h-full flex-col">
+<a href={href} class="tile group reveal block" data-tilt>
+  <article class="depth-card flex h-full flex-col">
     {
       cover && (
         <div class="tile__cover">
@@ -74,6 +74,10 @@ const transitionName = `case-${slug}`;
       <span class="arrow">Read case study →</span>
     </div>
   </article>
+
+  <!-- Glare highlight for the 3D tilt — position/opacity driven by MotionFX
+       through --glare-x / --glare-y / --glare-o. Invisible at rest. -->
+  <span aria-hidden="true" class="tile__glare"></span>
 </a>
 
 <style>
@@ -110,5 +114,26 @@ const transitionName = `case-${slug}`;
   }
   .tile:hover .arrow {
     color: var(--color-accent-text);
+  }
+  .tile__glare {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border-radius: inherit;
+    opacity: var(--glare-o, 0);
+    background: radial-gradient(
+      460px circle at var(--glare-x, 50%) var(--glare-y, 50%),
+      rgba(255, 255, 255, 0.09),
+      transparent 65%
+    );
+    transition: opacity 260ms ease;
+  }
+  :root[data-theme="light"] .tile__glare {
+    background: radial-gradient(
+      460px circle at var(--glare-x, 50%) var(--glare-y, 50%),
+      rgba(36, 54, 199, 0.07),
+      transparent 65%
+    );
   }
 </style>
