@@ -88,7 +88,13 @@ const transitionName = `case-${slug}`;
     border-radius: var(--radius-md);
     background: var(--color-panel);
     transition: border-color 200ms ease, transform 200ms ease;
+    /* `clip` (not `hidden`) so the tile is NOT a scroll container — otherwise
+       the .depth-card view() timeline binds to the tile instead of the
+       viewport and the 3D entrance never plays. Every browser that supports
+       animation-timeline also supports overflow: clip; older ones keep the
+       `hidden` fallback (and never run the animation anyway). */
     overflow: hidden;
+    overflow: clip;
   }
   /* Cover sits flush at the top — bleed to the tile edges so it reads as
      part of the card, not a contained thumbnail. */

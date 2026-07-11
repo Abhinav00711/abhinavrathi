@@ -646,13 +646,13 @@ kbd,
 [data-tilt] {
   transform-style: preserve-3d;
 }
-/* While the rAF loop steers `transform`, drop it from the transition list so
- * the element tracks the cursor 1:1 instead of smearing behind it. Everything
- * else (border, glare opacity, colors) keeps transitioning. */
+/* While the rAF loop steers `transform`, MotionFX sets transition-property
+ * inline to everything-but-transform (inline because equal-specificity scoped
+ * rules like WorkTile's .tile would win the cascade tie on stylesheet order).
+ * This rule only contributes the will-change hint for the duration. */
 [data-tilt].tilting,
 [data-magnetic].magnetizing {
   will-change: transform;
-  transition-property: border-color, background, color, box-shadow, opacity;
 }
 
 /* Hero content parallax — copy drifts slower than the page and fades as you
@@ -667,8 +667,25 @@ kbd,
     }
   }
 }
+/* The fade completes by ~70% of the range, then visibility flips so the
+ * near-invisible CTAs also leave the tab order and hit-testing (a keyboard
+ * user Shift-Tabbing back up would otherwise land focus on a ghost button).
+ * Scrolling back up restores everything — the timeline runs both ways. */
 @keyframes heroDrift {
-  to {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+  70% {
+    opacity: 0.05;
+    visibility: visible;
+  }
+  71%,
+  100% {
+    visibility: hidden;
+  }
+  100% {
     transform: translateY(88px);
     opacity: 0;
   }

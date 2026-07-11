@@ -8,20 +8,41 @@
  *   [data-magnetic]  Element leans toward the cursor while hovered and springs
  *                    back on leave. Used on the hero CTAs.
  *
- * Both run a per-element rAF lerp only while hovered — zero idle cost.
- * Gated to hover-capable fine pointers with motion allowed; on reduced motion
- * this script does nothing (and the CSS fallbacks are the resting states).
+ * Both run a per-element rAF lerp that stops as soon as the element converges
+ * on its target — zero cost while the cursor rests or nothing is hovered.
+ *
+ * Gated to hover-capable fine pointers. prefers-reduced-motion is consulted
+ * live: handlers no-op while it's on, and flipping it mid-hover resets any
+ * element that's currently animating (mirrors Hero3D's live teardown).
+ *
+ * While a loop steers `transform`, the element's transition-property is set
+ * inline to everything-but-transform. Inline (rather than a CSS class rule)
+ * because an equal-specificity Astro-scoped rule like WorkTile's `.tile`
+ * would win the cascade tie on stylesheet order and re-introduce the 200ms
+ * transform transition — smearing the tilt behind the cursor.
  */
 ---
 
 <script>
   (() => {
-    const ok =
-      window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
-      !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!ok) return;
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      return;
+    }
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+    const NO_TRANSFORM_TRANSITIONS =
+      "border-color, background, color, box-shadow, opacity";
+
+    // Every active element registers a reset here so a mid-session
+    // reduced-motion switch can stop it instantly.
+    const activeResets = new Set<() => void>();
+    reduce.addEventListener("change", () => {
+      if (!reduce.matches) return;
+      activeResets.forEach((reset) => reset());
+      activeResets.clear();
+    });
 
     /* ------------------------------------------------------------------ *
      * Tilt
@@ -29,8 +50,18 @@
     document.querySelectorAll<HTMLElement>("[data-tilt]").forEach((el) => {
       const maxDeg = Number(el.dataset.tiltMax || 6);
       let raf = 0;
-      let hovering = false;
       let rx = 0, ry = 0, trx = 0, try_ = 0;
+
+      const reset = () => {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+        rx = ry = trx = try_ = 0;
+        el.classList.remove("tilting");
+        el.style.transitionProperty = "";
+        el.style.transform = "";
+        el.style.setProperty("--glare-o", "0");
+        activeResets.delete(reset);
+      };
 
       const frame = () => {
         raf = 0;
@@ -39,11 +70,9 @@
         el.style.transform =
           `perspective(900px) rotateX(${rx.toFixed(3)}deg) ` +
           `rotateY(${ry.toFixed(3)}deg) translateY(-2px)`;
-        if (
-          hovering ||
-          Math.abs(rx - trx) > 0.02 ||
-          Math.abs(ry - try_) > 0.02
-        ) {
+        // Keep going only until we've converged on the target — pointermove
+        // reschedules whenever the target shifts.
+        if (Math.abs(rx - trx) > 0.02 || Math.abs(ry - try_) > 0.02) {
           raf = requestAnimationFrame(frame);
         }
       };
@@ -52,17 +81,17 @@
       };
 
       el.addEventListener("pointerenter", () => {
-        hovering = true;
-        // While tilting, transforms are steered per-frame from here — drop
-        // `transform` from the CSS transition list (see [data-tilt].tilting)
-        // so the card doesn't smear behind the cursor.
+        if (reduce.matches) return;
         el.classList.add("tilting");
+        el.style.transitionProperty = NO_TRANSFORM_TRANSITIONS;
+        activeResets.add(reset);
         schedule();
       });
 
       el.addEventListener(
         "pointermove",
         (e: PointerEvent) => {
+          if (reduce.matches) return;
           const r = el.getBoundingClientRect();
           const px = (e.clientX - r.left) / r.width; // 0..1
           const py = (e.clientY - r.top) / r.height;
@@ -76,19 +105,8 @@
         { passive: true }
       );
 
-      el.addEventListener("pointerleave", () => {
-        hovering = false;
-        trx = 0;
-        try_ = 0;
-        rx = 0;
-        ry = 0;
-        if (raf) cancelAnimationFrame(raf);
-        raf = 0;
-        // Hand the transform back to CSS; .tile's transition eases it home.
-        el.classList.remove("tilting");
-        el.style.transform = "";
-        el.style.setProperty("--glare-o", "0");
-      });
+      // Hand the transform back to CSS; .tile's transition eases it home.
+      el.addEventListener("pointerleave", reset);
     });
 
     /* ------------------------------------------------------------------ *
@@ -101,33 +119,51 @@
       let hovering = false;
       let x = 0, y = 0, tx = 0, ty = 0;
 
+      const reset = () => {
+        if (raf) cancelAnimationFrame(raf);
+        raf = 0;
+        hovering = false;
+        x = y = tx = ty = 0;
+        el.classList.remove("magnetizing");
+        el.style.transitionProperty = "";
+        el.style.transform = "";
+        activeResets.delete(reset);
+      };
+
       const frame = () => {
         raf = 0;
         x = lerp(x, tx, 0.18);
         y = lerp(y, ty, 0.18);
-        if (!hovering && Math.abs(x) < 0.1 && Math.abs(y) < 0.1) {
-          el.style.transform = "";
-          // Spring settled — hand transitions (incl. transform) back to CSS.
-          el.classList.remove("magnetizing");
+        const settled = Math.abs(x - tx) < 0.05 && Math.abs(y - ty) < 0.05;
+        if (settled) {
+          x = tx;
+          y = ty;
+        }
+        if (!hovering && settled && tx === 0 && ty === 0) {
+          // Spring fully returned — clean up and hand back to CSS.
+          reset();
           return;
         }
         el.style.transform = `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px)`;
-        raf = requestAnimationFrame(frame);
+        // Stop at convergence; pointermove reschedules on new targets.
+        if (!settled) raf = requestAnimationFrame(frame);
       };
       const schedule = () => {
         if (!raf) raf = requestAnimationFrame(frame);
       };
 
       el.addEventListener("pointerenter", () => {
+        if (reduce.matches) return;
         hovering = true;
-        // Same trick as tilt: the lerp loop owns `transform` while active, so
-        // drop it from the CSS transition list (see [data-magnetic].magnetizing).
         el.classList.add("magnetizing");
+        el.style.transitionProperty = NO_TRANSFORM_TRANSITIONS;
+        activeResets.add(reset);
         schedule();
       });
       el.addEventListener(
         "pointermove",
         (e: PointerEvent) => {
+          if (reduce.matches || !hovering) return;
           const r = el.getBoundingClientRect();
           const dx = e.clientX - (r.left + r.width / 2);
           const dy = e.clientY - (r.top + r.height / 2);
@@ -141,7 +177,7 @@
         hovering = false;
         tx = 0;
         ty = 0;
-        schedule();
+        schedule(); // spring back, then frame() calls reset() at rest
       });
     });
   })();

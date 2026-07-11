@@ -1,23 +1,68 @@
 ---
 /**
  * WebGL hero background host — the actual Three.js scene lives in
- * src/scripts/hero3d.ts and loads lazily (own chunk, post-idle) so it never
- * competes with the headline for first paint.
+ * src/scripts/hero3d.ts and loads lazily (own chunk, post-idle, only once the
+ * hero is near the viewport) so it never competes with the headline for
+ * first paint.
  *
  * Renders nothing at all when any gate fails; the existing gradient halo is
  * the fallback aesthetic, not a degraded one:
  *   - prefers-reduced-motion (also torn down live if the user flips it on)
- *   - no WebGL2 (three r180 requires it)
+ *   - no *hardware* WebGL2 (failIfMajorPerformanceCaveat rejects SwiftShader
+ *     et al. — the machines that can least afford a point cloud; `?fx` in the
+ *     URL bypasses the caveat check for demos/CI)
  *   - Save-Data connections
+ *   - the user pressed the pause toggle (persisted in localStorage)
+ *
+ * The pause/play button satisfies WCAG 2.2.2 (Pause, Stop, Hide) for the
+ * auto-playing scene. It only appears once the scene is actually running (or
+ * paused-by-choice), so browsers that never mount the canvas never show it.
  */
 ---
 
 <div class="hero3d" data-hero3d aria-hidden="true"></div>
 
+<button
+  type="button"
+  class="hero3d-toggle"
+  data-hero3d-toggle
+  hidden
+  aria-label="Pause background animation"
+>
+  <svg
+    data-icon-pause
+    width="10"
+    height="10"
+    viewBox="0 0 10 10"
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <rect x="1" y="0" width="3" height="10" rx="0.75"></rect>
+    <rect x="6" y="0" width="3" height="10" rx="0.75"></rect>
+  </svg>
+  <svg
+    data-icon-play
+    width="10"
+    height="10"
+    viewBox="0 0 10 10"
+    fill="currentColor"
+    aria-hidden="true"
+    hidden
+  >
+    <path d="M1.5 0.6 9 5 1.5 9.4Z"></path>
+  </svg>
+</button>
+
 <script>
   (() => {
     const host = document.querySelector<HTMLElement>("[data-hero3d]");
     if (!host) return;
+    const hero = host.closest<HTMLElement>("[data-hero]") ?? host;
+    const toggle = document.querySelector<HTMLButtonElement>(
+      "[data-hero3d-toggle]"
+    );
+    const iconPause = toggle?.querySelector<SVGElement>("[data-icon-pause]");
+    const iconPlay = toggle?.querySelector<SVGElement>("[data-icon-play]");
 
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -26,24 +71,71 @@
     ).connection?.saveData;
     if (saveData) return;
 
-    const probe = document.createElement("canvas");
-    const gl = probe.getContext("webgl2");
-    if (!gl) return;
-    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    // `?fx` bypasses the performance-caveat rejection (demos, CI screenshots).
+    const force = new URLSearchParams(window.location.search).has("fx");
+
+    const MOTION_KEY = "hero-motion";
+    const userPaused = () => {
+      try {
+        return localStorage.getItem(MOTION_KEY) === "off";
+      } catch {
+        return false;
+      }
+    };
 
     let teardown: (() => void) | null = null;
     let loading = false;
+    let near = false; // hero has come within 200px of the viewport
+    let unsupported = false; // probe failed — don't retry, hide the toggle
+
+    // Probe lives inside boot() so no WebGL context is created during the
+    // startup script burst (or ever, for reduced-motion / paused visitors).
+    const probeWebGL2 = () => {
+      const probe = document.createElement("canvas");
+      const gl = probe.getContext("webgl2", {
+        failIfMajorPerformanceCaveat: !force,
+      });
+      if (!gl) return false;
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      return true;
+    };
+
+    const syncToggle = () => {
+      if (!toggle || !iconPause || !iconPlay) return;
+      const running = !!teardown;
+      // Show while running, or while paused-by-choice and resumable. Hidden
+      // under reduced-motion (nothing to control) and before the hero is near.
+      toggle.hidden =
+        reduce.matches || unsupported || !near || (!running && !userPaused());
+      iconPause.toggleAttribute("hidden", !running);
+      iconPlay.toggleAttribute("hidden", running);
+      toggle.setAttribute(
+        "aria-label",
+        running ? "Pause background animation" : "Play background animation"
+      );
+    };
 
     const boot = async () => {
-      if (teardown || loading || reduce.matches) return;
+      if (teardown || loading || unsupported) return;
+      if (reduce.matches || userPaused()) return;
+      if (!probeWebGL2()) {
+        unsupported = true;
+        syncToggle();
+        return;
+      }
       loading = true;
       try {
         const { initHero3D } = await import("../scripts/hero3d");
-        if (!reduce.matches) teardown = initHero3D(host);
+        if (!reduce.matches && !userPaused()) {
+          teardown = initHero3D(host, {
+            failIfMajorPerformanceCaveat: !force,
+          });
+        }
       } catch {
         /* chunk failed to load (flaky network) — gradient fallback remains */
       }
       loading = false;
+      syncToggle();
     };
 
     const whenIdle = (cb: () => void) => {
@@ -54,15 +146,48 @@
       }
     };
 
-    if (!reduce.matches) whenIdle(boot);
+    // Don't pay for the chunk / context / geometry while the hero is far
+    // offscreen (deep-anchor lands, back-navigation restores). One-shot.
+    const gate = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        near = true;
+        gate.disconnect();
+        if (!reduce.matches) whenIdle(boot);
+        syncToggle(); // surfaces the play button for returning paused users
+      },
+      { rootMargin: "200px" }
+    );
+    gate.observe(hero);
 
-    // Honor a mid-session switch in either direction.
+    // Honor a mid-session reduced-motion switch in either direction.
     reduce.addEventListener("change", () => {
       if (reduce.matches) {
         teardown?.();
         teardown = null;
-      } else {
+      } else if (near) {
         whenIdle(boot);
+      }
+      syncToggle();
+    });
+
+    toggle?.addEventListener("click", async () => {
+      if (teardown) {
+        teardown();
+        teardown = null;
+        try {
+          localStorage.setItem(MOTION_KEY, "off");
+        } catch {
+          /* private mode — session-only pause still works */
+        }
+        syncToggle();
+      } else {
+        try {
+          localStorage.removeItem(MOTION_KEY);
+        } catch {
+          /* ignore */
+        }
+        await boot();
       }
     });
   })();
@@ -79,5 +204,26 @@
     display: block;
     width: 100%;
     height: 100%;
+  }
+  .hero3d-toggle {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+    z-index: 12;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--color-hairline-strong);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--color-panel) 80%, transparent);
+    color: var(--color-faint);
+    cursor: pointer;
+    transition: color 160ms ease, border-color 160ms ease;
+  }
+  .hero3d-toggle:hover {
+    color: var(--color-accent-text);
+    border-color: var(--color-accent);
   }
 </style>

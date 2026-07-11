@@ -38,13 +38,28 @@ const metrics: Array<{ k: string; v: string }> = [
   >
   </div>
 
-  <!-- WebGL "signal surface" — lazy Three.js scene behind the copy. Gated on
-       reduced-motion / WebGL2 / Save-Data; the halo above is the fallback. -->
-  <Hero3D />
-
   <!-- Cursor-follow spotlight (desktop, hover-capable, motion-OK only).
        Reads --spot-x / --spot-y CSS variables set by the pointermove listener. -->
   <div aria-hidden="true" class="cursor-spotlight"></div>
+
+  <!-- Readability scrim between the WebGL canvas (z-0) and the copy (z-10):
+       the moving point field otherwise drops glyph-local contrast on the
+       eyebrow/paragraph. color-mix on the surface token keeps it correct in
+       all three themes with no JS. -->
+  <div
+    aria-hidden="true"
+    class="pointer-events-none absolute inset-0"
+    style="
+      z-index: 1;
+      background: radial-gradient(
+        75% 70% at 32% 42%,
+        color-mix(in srgb, var(--color-surface) 85%, transparent),
+        color-mix(in srgb, var(--color-surface) 55%, transparent) 55%,
+        transparent 78%
+      );
+    "
+  >
+  </div>
 
   <div class="container-prose relative z-10">
     <p class="eyebrow reveal">{eyebrow}</p>
@@ -107,6 +122,12 @@ const metrics: Array<{ k: string; v: string }> = [
       </span>
     </div>
   </div>
+
+  <!-- WebGL "signal surface" — lazy Three.js scene behind the copy (the
+       canvas layers at z-0 regardless of DOM order; mounting after the copy
+       puts the scene's pause toggle last in the hero's tab order). Gated on
+       reduced-motion / hardware WebGL2 / Save-Data; the halo is the fallback. -->
+  <Hero3D />
 </section>
 
 <script>

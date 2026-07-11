@@ -79,6 +79,10 @@ const POINT_FRAG = /* glsl */ `
     float circle = smoothstep(0.5, 0.12, d);
     if (circle < 0.01) discard;
     gl_FragColor = vec4(uColor, circle * vAlpha * uOpacity);
+    // Convert the linear working-space color back to sRGB for output —
+    // without this the points render darker and hue-shifted vs the CSS
+    // accent tokens they're supposed to match.
+    #include <colorspace_fragment>
   }
 `;
 
@@ -141,13 +145,17 @@ function buildDustGeometry(compact: boolean) {
   return geo;
 }
 
-export function initHero3D(host: HTMLElement): () => void {
+export function initHero3D(
+  host: HTMLElement,
+  opts: { failIfMajorPerformanceCaveat?: boolean } = {}
+): () => void {
   let renderer: THREE.WebGLRenderer;
   try {
     renderer = new THREE.WebGLRenderer({
       alpha: true,
       antialias: false,
       powerPreference: "low-power",
+      failIfMajorPerformanceCaveat: opts.failIfMajorPerformanceCaveat ?? true,
     });
   } catch {
     // Context creation can fail even when the probe succeeded (GPU pressure,
@@ -314,6 +322,9 @@ export function initHero3D(host: HTMLElement): () => void {
     surfaceMat.dispose();
     dustMat.dispose();
     renderer.dispose();
+    // dispose() alone never releases the GL context — force it so repeated
+    // pause/resume (or reduced-motion) cycles don't accumulate live contexts.
+    renderer.forceContextLoss();
     renderer.domElement.remove();
     host.style.opacity = "";
   };
